@@ -4,7 +4,7 @@ ALIGN
 
 prog3
     ADRL SP, prog3_stack
-    MOV R3, #&2000
+    MOV R3, #10 ; output every 10 times we are context switched to
     ADR R7, thing1
     ADR R8, thing2
 
@@ -12,8 +12,10 @@ prog3
 
     prog3_loop
         SUBS R3, R3, #1
-        BNE prog3_loop
-        MOV R3, #&2000
+            SVCNE call_yield ; yield to other threads if we don't want to output yet
+            BNE prog3_loop
+
+        MOV R3, #10
             ; interrupts disabled, cannot be context-switched here
             SVC call_clear_display
 

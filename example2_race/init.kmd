@@ -1,0 +1,879 @@
+KMD
+00000000:             ; INCLUDE ../os/OS_header.s
+00000000:             ; ; v9.5
+00000000:             ; ; Changelog:
+00000000:             ; ; - Changed init -> SVC_init
+00000000:             ; ;   - 'init' will now be a USER label, denoting the beginning of the program
+00000000:             ; ;   - The user should add the threads (in an atomic block) in the init routine
+00000000:             ; ;   - They should then exit the init thread.
+00000000:             ; ; - Added SVCs for creating atomic block (disables interrupts)
+00000000:             ; ; - Added SVC for exiting thread
+00000000:             ; ; - Added SVC for creating new thread
+00000000:             ; 
+00000000:             ; Max_SVC EQU 11
+00000000:             ; call_write_string EQU 0
+00000000:             ; call_write_char EQU 1
+00000000:             ; call_clear_display EQU 2
+00000000:             ; call_hang EQU 3
+00000000:             ; call_wait_ms EQU 4
+00000000:             ; call_load_port_B EQU 5
+00000000:             ; call_BEGIN_ATOMIC_BLOCK EQU 6
+00000000:             ; call_END_ATOMIC_BLOCK EQU 7
+00000000:             ; call_add_thread_to_pool EQU 8
+00000000:             ; call_exit_thread EQU 9
+00000000:             ; call_yield EQU 10
+00000000:             ; 
+00000000:             ; INTERRUPT_enable_timer_compare EQU 1
+00000000:             ; 
+00000000:             ; disable_interrupts EQU &80
+00000000:             ; 
+00000000:             ; base_IO_address EQU &10000000
+00000000:             ; OFFSET_enable_interrupts_port EQU &1C 
+00000000:             ; 
+00000000:             ; port_B_address EQU &10000004
+00000000:             ; timer_compare_port EQU &1000000C
+00000000:             ; 
+00000000:             ; 
+00000000:             ; 
+00000000: EA000005    ; B SVC_init
+00000004: EA000016    ; B undefined_instruction
+00000008: EA000016    ; B SVC_handler
+0000000C: E1A00000    ; NOP
+00000010: E1A00000    ; NOP
+00000014: E1A00000    ; NOP
+00000018: EA0001B7    ; B interrupt_handler
+0000001C:             ; 
+0000001C:             ; SVC_init
+0000001C: E28FDFE2    ;     ADRL SP, supervisor_stack_top ; set supervisor sp (R13) to top of stack allocation
+00000020:             ;     
+00000020: EB000163    ;     BL TS_BUFFER_setup ; set up thread stack buffer pointers to enable enqueue, dequeue
+00000024:             ; 
+00000024:             ;     ; switch to interrupt mode first to set up stack etc.
+00000024: E3A0E012    ;     MOV R14, #BM_interrupt_mode
+00000028: E12FF00E    ;     MSR CPSR, R14 ; switch to interrupt mode
+0000002C:             ; 
+0000002C: E28FDF5F    ;     ADRL SP, interrupt_stack_top ; set up interrupt mode stack
+00000030: E28DDB01    ; 
+00000034:             ; 
+00000034:             ; 
+00000034: E3A00001    ;     MOV R0, #INTERRUPT_enable_timer_compare
+00000038: E3A01201    ;     MOV R1, #base_IO_address
+0000003C: E281101C    ;     ADD R1, R1, #OFFSET_enable_interrupts_port
+00000040: E5010000    ;     STR R0, [R1] ; enable timer compare interrupt
+00000044:             ; 
+00000044:             ; 
+00000044: E3A00000    ;     MOV R0, #0
+00000048: E3A01000    ;     MOV R1, #0 ; reset registers to 0 for convention
+0000004C:             ; 
+0000004C: E3A0E010    ;     MOV R14, #BM_user_mode ; set up user mode
+00000050: E3CEE080    ;     BIC R14, R14, #disable_interrupts  ; Clear the disable interrupts bit, thus ENABLING them.
+00000054:             ;     
+00000054: E16FF00E    ;     MSR SPSR, R14 ; switch to user mode
+00000058: E28FEFFD    ;     ADRL R14, init ; set up entry point of user program
+0000005C: E28EEB01    ; 
+00000060: E1B0F00E    ;     MOVS PC, R14 ; return to user code
+00000064:             ; 
+00000064:             ; 
+00000064:             ; undefined_instruction
+00000064: EAFFFFFE    ;     B .
+00000068:             ; 
+00000068:             ; SVC_handler
+00000068: E92D4000    ;     PUSH {LR}
+0000006C: E51EE004    ;     LDR R14, [LR, #-4]
+00000070: E3CEE4FF    ;     BIC R14, R14, #&FF000000
+00000074:             ; 
+00000074: E35E000B    ;     CMP R14, #Max_SVC
+00000078:             ;     
+00000078: B08FE10E    ; table_calc    ADDLT R14, PC, R14, LSL #2
+0000007C: B59EF004    ;     LDRLT PC, [R14, #(SVC_jump_table - (table_calc + 8))]
+00000080: EAFFFFF7    ;     B undefined_instruction
+00000084: 000000B0    ; SVC_jump_table DEFW SVC_0 ; print string
+00000088: 000000B8    ;                DEFW SVC_1 ; print char
+0000008C: 000000C0    ;                DEFW SVC_2 ; clear display
+00000090: 000000D4    ;                DEFW SVC_3 ; hang prog
+00000094: 000000D8    ;                DEFW SVC_4 ; wait variable amount of ms
+00000098: 000000E0    ;                DEFW SVC_5 ; load Port B into R0.
+0000009C: 000000F4    ;                DEFW SVC_6 ; disable interrupts
+000000A0: 0000010C    ;                DEFW SVC_7 ; enable interrupts
+000000A4: 00000124    ;                DEFW SVC_8 ; add thread to pool
+000000A8: 00000168    ;                DEFW SVC_9 ; exit current thread and switch to next
+000000AC: 00000178    ;                DEFW SVC_10 ; yield to cpu
+000000B0:             ; SVC_0
+000000B0:             ;     ; print string
+000000B0: EB0001B0    ;     BL write_string
+000000B4: EA00003B    ;     B SVC_exit
+000000B8:             ; 
+000000B8:             ; SVC_1
+000000B8:             ;     ; print char
+000000B8: EB0001B6    ;     BL write_character
+000000BC: EA000039    ;     B SVC_exit
+000000C0:             ; 
+000000C0:             ; SVC_2
+000000C0: E92D0001    ;     PUSH {R0}
+000000C4: E3A00001    ;     MOV R0, #&01
+000000C8: EB0001B2    ;     BL write_character
+000000CC: E8BD0001    ;     POP {R0}
+000000D0: EA000034    ;     B SVC_exit
+000000D4:             ; 
+000000D4:             ; SVC_3
+000000D4:             ;     ; hang program forever
+000000D4: EAFFFFFE    ;     B .
+000000D8:             ; 
+000000D8:             ; SVC_4
+000000D8:             ;     ; wait variable amount of ms (R0 is input)
+000000D8: EB0001CD    ;     BL wait_ms
+000000DC: EA000031    ;     B SVC_exit
+000000E0:             ; 
+000000E0:             ; SVC_5
+000000E0:             ;     ; load Port B into R0
+000000E0: E92D0002    ;     PUSH {R1}
+000000E4: E3A01241    ;     MOV R1, #port_B_address
+000000E8: E5510000    ;     LDRB R0, [R1]
+000000EC: E8BD0002    ;     POP {R1}
+000000F0: EA00002C    ;     B SVC_exit
+000000F4:             ; 
+000000F4:             ; SVC_6
+000000F4:             ;     ; Disable interrupts in user mode
+000000F4: E92D0001    ;     PUSH {R0}
+000000F8:             ; 
+000000F8: E14F0000    ;     MRS R0, SPSR
+000000FC: E3800080    ;     ORR R0, R0, #disable_interrupts ; enable the 'disable interrupts' bit
+00000100: E16FF000    ;     MSR SPSR, R0
+00000104:             ; 
+00000104: E8BD0001    ;     POP {R0}
+00000108: EA000026    ;     B SVC_exit ; will save the SPSR back to the CPSR allowing above^
+0000010C:             ; 
+0000010C:             ; SVC_7
+0000010C:             ;     ; Enable interrupts in user mode
+0000010C: E92D0001    ;     PUSH {R0}
+00000110:             ; 
+00000110: E14F0000    ;     MRS R0, SPSR
+00000114: E3C00080    ;     BIC R0, R0, #disable_interrupts ; disable the 'disable interrupts' bit
+00000118: E16FF000    ;     MSR SPSR, R0
+0000011C:             ; 
+0000011C: E8BD0001    ;     POP {R0}
+00000120: EA000020    ;     B SVC_exit ; will save the SPSR back to the CPSR allowing above^
+00000124:             ; 
+00000124:             ; SVC_8
+00000124:             ;     ; FUNCTION: Add program onto the context switch pool
+00000124:             ;     ; INPUT: R0 = pointer to beginning of program, R1 = pointer to program's stack
+00000124:             ;     ; OUTPUT: None
+00000124:             ;     ; DESCRIPTION: Takes program information as input and sets up information to include progra
+                      ; m
+00000124:             ;     ; in context switching.
+00000124:             ;     ; This is REQUIRED to allow the program to be included in the time slicing.
+00000124:             ;     
+00000124: E92D003D    ;     PUSH {R0, R2-R5}
+00000128:             ; 
+00000128: E1A0500D    ;     MOV R5, SP
+0000012C:             ; 
+0000012C:             ;     ; Create a fresh user mode CPSR and store for now
+0000012C: E3A02010    ;     MOV R2, #BM_user_mode
+00000130: E3C22080    ;     BIC R2, R2, #disable_interrupts ; enable interrupts so the user program can be context swit
+                      ; ched
+00000134:             ; 
+00000134:             ;     ; -------------- SETUP thread stack for program --------------
+00000134: E1A0D001    ;     MOV SP, R1 ; SP = program's stack that was input
+00000138:             ; 
+00000138: E3A03000    ;     MOV R3, #0
+0000013C: E3A0400F    ;     MOV R4, #15
+00000140:             ;     ; Push blank (0) data for R0-R14 incl.
+00000140:             ;     setup_TS_keep_pushing_blank
+00000140: E92D0008    ;         PUSH {R3}
+00000144: E2544001    ;         SUBS R4, R4, #1
+00000148: 1AFFFFFC    ;         BNE setup_TS_keep_pushing_blank
+0000014C:             ; 
+0000014C:             ; 
+0000014C: E92D0001    ;     PUSH {R0} ; push pointer to beginning of program as the PC value
+00000150: E92D0004    ;     PUSH {R2} ; push CPSR
+00000154:             ; 
+00000154: E1A0000D    ;     MOV R0, SP ; Input of R0 is OVERWRITTEN (restored by the stack pop though)
+00000158: EB00011C    ;     BL TS_BUFFER_enqueue ; enqueue updated SP of prog2
+0000015C:             ;     ; --------------- END SETUP  ----------------
+0000015C:             ; 
+0000015C: E1A0D005    ;     MOV SP, R5 ; restore back to svc stack
+00000160:             ; 
+00000160: E8BD003D    ;     POP {R0, R2-R5}
+00000164: EA00000F    ;     B SVC_exit
+00000168:             ; 
+00000168:             ; SVC_9
+00000168: E8BD4000    ;     POP {LR} ; LR is pushed by jump table
+0000016C:             ;     ; we need to pop it as we won't use SVC_exit (which normally pops it)
+0000016C:             ; 
+0000016C:             ;     ; exit current thread
+0000016C:             ;     ; This is done by moving into interrupt mode, branching to the context switch BUT
+0000016C:             ;     ; skipping the 'state saving' part of the switch.
+0000016C:             ;     ; Effectively switch to next thread without saving (and enqueueing) 
+0000016C:             ;     ; current one, therefore 'ending' it.
+0000016C:             ; 
+0000016C: E3A0E012    ;     MOV R14, #BM_interrupt_mode
+00000170: E12FF00E    ;     MSR CPSR, R14 ; switch to interrupt mode
+00000174:             ; 
+00000174: EA000170    ;     B ISR_context_switch_nosave
+00000178:             ;     ; no need for BL as we're not coming back
+00000178:             ; 
+00000178:             ;     ; no need for SVC_exit as the above branch will restore the state of the next available thr
+                      ; ead.
+00000178:             ; 
+00000178:             ; SVC_10
+00000178:             ;     ; yield to cpu
+00000178:             ;     ; effectively force a context switch
+00000178:             ;     ; problem: how do we do LR_irq = LR_svc so 
+00000178:             ;     ;          that we correctly return to the right place after the yield
+00000178:             ;     ; current solution: a lot of mode switching
+00000178:             ;     
+00000178: E8BD4000    ;     POP {LR}  ; restore original LR as it's been overwritten by jump table
+0000017C:             ;     ; also pop it off stack as it won't be popped by SVC_exit (because we aren't branching ther
+                      ; e)
+0000017C:             ; 
+0000017C: E92D0001    ;     PUSH {R0} ; to use as scratch register. NOTE: pushed to SP_svc
+00000180:             ; 
+00000180: E1A0000E    ;     MOV R0, LR ; R0 = LR_svc
+00000184:             ; 
+00000184: E3A0E012    ;     MOV R14, #BM_interrupt_mode
+00000188: E12FF00E    ;     MSR CPSR, R14 ; switch to interrupt mode
+0000018C:             ; 
+0000018C: E1A0E000    ;     MOV LR, R0 ; LR_irq = R0 = LR_svc
+00000190:             ; 
+00000190: E3A00013    ;     MOV R0, #BM_svc_mode
+00000194: E12FF000    ;     MSR CPSR, R0
+00000198:             ;     
+00000198: E8BD0001    ;     POP {R0} ; restore R0
+0000019C:             ; 
+0000019C: E3A0E012    ;     MOV R14, #BM_interrupt_mode
+000001A0: E12FF00E    ;     MSR CPSR, R14 ; switch to interrupt mode
+000001A4:             ;     
+000001A4: EA00015D    ;     B ISR_context_switch ; now force a context switch
+000001A8:             ; 
+000001A8:             ; 
+000001A8:             ; 
+000001A8:             ; SVC_exit
+000001A8: E8FD8000    ;     POP {PC}^
+000001AC:             ; 
+000001AC:             ; 
+000001AC:             ; DEFS 512
+000003AC: 00000000    ; supervisor_stack_top DEFW 0
+000003B0:             ; 
+000003B0:             ; DEFS 512
+000005B0: 00000000    ; interrupt_stack_top DEFW 0
+000005B4:             ; 
+000005B4:             ; INCLUDE interrupts.s ; contains interrupt handler & routines
+000005B4:             ; ; v9.5
+000005B4:             ; ; Changelog:
+000005B4:             ; ; - Added ISR_context_switch_nosave label (used for exiting a thread)
+000005B4:             ; ; - Added context switching using thread's own stack to save its registers
+000005B4:             ; 
+000005B4:             ; 
+000005B4:             ; 
+000005B4:             ; INCLUDE timer_constants.s ; for timer status variables, minute/second times, etc.
+000005B4:             ; ; v7.0
+000005B4:             ; 
+000005B4:             ; TIMER_STATUS_counting EQU 0
+000005B4:             ; TIMER_STATUS_pause    EQU 1
+000005B4:             ; TIMER_STATUS_reset    EQU 2
+000005B4:             ; 
+000005B4:             ; TIMER_DISPLAY_sec_digit_0 EQU 19
+000005B4:             ; TIMER_DISPLAY_sec_digit_1 EQU 18
+000005B4:             ; 
+000005B4:             ; TIMER_DISPLAY_min_digit_0 EQU 7
+000005B4:             ; TIMER_DISPLAY_min_digit_1 EQU 6
+000005B4:             ; 
+000005B4:             ; minute_passed EQU 60
+000005B4:             ; second_passed EQU 10
+000005B4:             ; hundred_ms EQU 100
+000005B4:             ; INCLUDE ts_circ_buffer_util.s ; Functions & data for the thread stack pointer queue
+000005B4:             ; ; v1.0
+000005B4:             ; 
+000005B4:             ; 
+000005B4:             ; TS_BUFFER_MAX_CAPACITY EQU 3
+000005B4:             ; 
+000005B4:             ; TS_BUFFER_setup
+000005B4:             ;     ; FUNCTION: Setup pointers for TS buffer
+000005B4:             ;     ; Description: Should be called at OS setup stage.
+000005B4: E92D4003    ;     PUSH {R0-R1, LR}
+000005B8:             ; 
+000005B8:             ;     ; Set up pointers
+000005B8: E28F0F4E    ;     ADRL R0, TS_CIRC_BUFFER
+000005BC: E28F10AC    ;     ADR R1, TS_CIRC_BUFFER_HEAD
+000005C0: E5010000    ;     STR R0, [R1]
+000005C4: E28F10A8    ;     ADR R1, TS_CIRC_BUFFER_TAIL
+000005C8: E5010000    ;     STR R0, [R1]
+000005CC:             ; 
+000005CC: E8BD8003    ;     POP {R0-R1, PC}
+000005D0:             ; 
+000005D0:             ; 
+000005D0:             ; TS_BUFFER_enqueue
+000005D0:             ;     ; FUNCTION: Enqueue a stack pointer to the thread stack buffer
+000005D0:             ;     ; INPUT: R0 as the pointer to enqueue
+000005D0:             ;     ; OUTPUT: None
+000005D0:             ;     ; Description: Enqueues (circularly) stack pointer to buffer. Will NOT overwrite if full.
+000005D0:             ; 
+000005D0: E92D401E    ;     PUSH {R1-R4, LR}
+000005D4:             ; 
+000005D4: E28F1090    ;     ADR R1, TS_CIRC_BUFFER_LENGTH
+000005D8: E5111000    ;     LDR R1, [R1]
+000005DC: E3A02003    ;     MOV R2, #TS_BUFFER_MAX_CAPACITY
+000005E0: E1510002    ;     CMP R1, R2
+000005E4: A8BD801E    ;         POPGE {R1-R4, PC} ; exit routine; don't enqueue if buffer is full
+000005E8:             ; 
+000005E8:             ;     ; ------ 1. & 2. ------
+000005E8: E28F1080    ;     ADR R1, TS_CIRC_BUFFER_HEAD
+000005EC: E5112000    ;     LDR R2, [R1] ; load pointer from TS_CIRC_BUFFER_HEAD
+000005F0: E4020004    ;     STR R0, [R2], #-4               ; -4 as we are word-addressing 
+000005F4:             ; 
+000005F4:             ;     ; ----- 3. ------
+000005F4: E28F30FC    ;     ADR R3, TS_CIRC_BUFFER
+000005F8: E2434060    ;     SUB R4, R3, #(32*TS_BUFFER_MAX_CAPACITY)
+000005FC: E1520004    ;     CMP R2, R4
+00000600: B1A02003    ;     MOVLT R2, R3 ; if R2 is out of range, change R2 to point back to the top (TS_CIRC_BUFFER)
+00000604:             ; 
+00000604:             ; 
+00000604: E5012000    ;     STR R2, [R1] ; Store new head pointer back to TS_CIRC_BUFFER_HEAD
+00000608:             ; 
+00000608: E28F105C    ;     ADR R1, TS_CIRC_BUFFER_LENGTH
+0000060C: E5112000    ;     LDR R2, [R1]
+00000610: E2822001    ;     ADD R2, R2, #1 ; +1 to amount of enqueued items (length)
+00000614: E5012000    ;     STR R2, [R1]
+00000618:             ; 
+00000618:             ;     
+00000618: E8BD801E    ;     POP {R1-R4, PC}
+0000061C:             ; 
+0000061C:             ; TS_BUFFER_dequeue
+0000061C:             ;     ; FUNCTION: Dequeue thread stack pointer
+0000061C:             ;     ; INPUT: None
+0000061C:             ;     ; OUTPUT: R0 overwritten with next thread stack pointer
+0000061C:             ; 
+0000061C: E92D401E    ;     PUSH {R1-R4, LR}
+00000620:             ; 
+00000620: E28F1044    ;     ADR R1, TS_CIRC_BUFFER_LENGTH
+00000624: E5111000    ;     LDR R1, [R1]
+00000628: E3A02000    ;     MOV R2, #0
+0000062C: E1510002    ;     CMP R1, R2
+00000630:             ;         ; Return 0 (empty value) if queue is empty
+00000630: 03A00000    ;         MOVEQ R0, #0 ; Return value of 0 as a default
+00000634: 08BD801E    ;         POPEQ {R1-R4, PC} ; exit routine early to avoid code below
+00000638:             ; 
+00000638:             ;     ; ------ 1. & 2. ------
+00000638: E28F1034    ;     ADR R1, TS_CIRC_BUFFER_TAIL
+0000063C: E5112000    ;     LDR R2, [R1] ; load pointer from TS_CIRC_BUFFER_TAIL
+00000640: E4120004    ;     LDR R0, [R2], #-4
+00000644:             ; 
+00000644:             ;     ; ----- 3. ------
+00000644: E28F30AC    ;     ADR R3, TS_CIRC_BUFFER
+00000648: E2434060    ;     SUB R4, R3, #(32*TS_BUFFER_MAX_CAPACITY)
+0000064C: E1520004    ;     CMP R2, R4
+00000650: B1A02003    ;     MOVLT R2, R3 ; if R2 is out of range, change R2 to point back to the top (TS_CIRC_BUFFER)
+00000654:             ;     
+00000654:             ; 
+00000654: E5012000    ;     STR R2, [R1] ; Store new tail pointer back to TS_CIRC_BUFFER_TAIL
+00000658:             ; 
+00000658: E28F100C    ;     ADR R1, TS_CIRC_BUFFER_LENGTH
+0000065C: E5112000    ;     LDR R2, [R1]
+00000660: E2422001    ;     SUB R2, R2, #1 ; -1 to amount of enqueued items (length)
+00000664: E5012000    ;     STR R2, [R1]
+00000668:             ; 
+00000668: E8BD801E    ;     POP {R1-R4, PC}
+0000066C:             ; 
+0000066C: 00000000    ; TS_CIRC_BUFFER_LENGTH DEFW 0
+00000670: 00000000    ; TS_CIRC_BUFFER_HEAD DEFW 0
+00000674: 00000000    ; TS_CIRC_BUFFER_TAIL DEFW 0
+00000678:             ; DEFS 128
+000006F8: 00000000    ; TS_CIRC_BUFFER DEFW 0
+000006FC:             ; 
+000006FC:             ; interrupt_active_port_offset EQU &18
+000006FC:             ; timer_compare_interrupt_active EQU &1
+000006FC:             ; timer_counter_port EQU &10000008
+000006FC:             ; 
+000006FC:             ; FPGA_PIO_base_address EQU &2000_0000
+000006FC:             ; OFFSET_FPGA_PIO_kb_port_data EQU &2
+000006FC:             ; OFFSET_FPGA_PIO_kb_port_control EQU &3
+000006FC:             ; 
+000006FC:             ; OFFSET_PIO_kb_port_IO_control EQU 1
+000006FC:             ; 
+000006FC:             ; 
+000006FC:             ; interrupt_handler
+000006FC: E24EE004    ;     SUB LR, LR, #4 ; LR points ahead when interrupt happens so we need to correct it
+00000700: E92D4003    ;     PUSH {R0-R1, LR}
+00000704:             ; 
+00000704:             ;     
+00000704: E3A00201    ;     MOV R0, #base_IO_address ; from OS_header.s, which this must be included into
+00000708: E2800018    ;     ADD R0, R0, #interrupt_active_port_offset
+0000070C: E5501000    ;     LDRB R1, [R0]
+00000710:             ; 
+00000710: E2111001    ;     ANDS R1, R1, #timer_compare_interrupt_active
+00000714: 18BD4003    ;         POPNE {R0-R1, LR} ; restore registers to be saved for context switch
+00000718: 1A000000    ;         BNE ISR_context_switch ; no link as we want to preserve LR_irq (user prog PC)
+0000071C:             ; 
+0000071C: E8FD8003    ;     POP {R0-R1, PC}^ ; restore & return
+00000720:             ; 
+00000720:             ; 
+00000720:             ; ISR_context_switch
+00000720:             ;     ; Set up timer for next interrupt and execute context switch
+00000720:             ; 
+00000720:             ;     ; get user SP
+00000720: E96D2000    ;     PUSH {SP}^
+00000724: E51DD000    ;     LDR SP, [SP]
+00000728:             ; 
+00000728: E96D7FFF    ;     PUSH {R0-LR}^ ; store R0-LR_usr onto the user program's stack
+0000072C: E14F0000    ;     MRS R0, SPSR ; get user's CPSR
+00000730: E92D4001    ;     PUSH {R0, LR} ; store CPSR and PC to return to (LR_irq)
+00000734:             ; 
+00000734: E1A0000D    ;     MOV R0, SP
+00000738: EBFFFFA4    ;     BL TS_BUFFER_enqueue ; enqueue this thread stack for later
+0000073C:             ; 
+0000073C:             ;     ISR_context_switch_nosave
+0000073C:             ;         ; Why have this label?
+0000073C:             ;         ; This label enables us to skip the 'state saving' section of the context switch.
+0000073C:             ;         ; It is used when we want to CLOSE a thread (therefore never switch to it again).
+0000073C:             ;         ; Thus we do NOT save the thread's info back, we just switch to another.
+0000073C:             ; 
+0000073C:             ; 
+0000073C:             ;     ; -------------- SETUP NEXT CONTEXT SWITCH INTERRUPT -----------
+0000073C:             ; 
+0000073C:             ;     TIME_PER_THREAD EQU 2;ms
+0000073C:             ; 
+0000073C: E3A012C1    ;     MOV R1, #timer_compare_port
+00000740: E5510000    ;     LDRB R0, [R1] ; load current time
+00000744: E2800002    ;     ADD R0, R0, #TIME_PER_THREAD ; add ms to wait for
+00000748: E5410000    ;     STRB R0, [R1]
+0000074C:             ; 
+0000074C:             ; 
+0000074C:             ;     ; ACKNOWLEDGE THE TIMER INTERRUPT
+0000074C: E3A00201    ;     MOV R0, #base_IO_address ; from OS_header.s, which this will be included into
+00000750: E2800018    ;     ADD R0, R0, #interrupt_active_port_offset
+00000754: E5501000    ;     LDRB R1, [R0]
+00000758: E3C11001    ;     BIC R1, R1, #timer_compare_interrupt_active ; clear timer interrupt bit
+0000075C: E5401000    ;     STRB R1, [R0]
+00000760:             ;     ; STORE ACKNOWLEDGEMENT
+00000760:             ; 
+00000760:             ;     ; -------------- End of Setup -----------
+00000760:             ; 
+00000760:             ;     
+00000760:             ;     ; -------------- Restore next thread's state ----------------
+00000760: EBFFFFAD    ;     BL TS_BUFFER_dequeue ; R0 = new thread stack
+00000764: E1A0D000    ;     MOV SP, R0
+00000768:             ; 
+00000768: E8BD4001    ;     POP {R0, LR} ; get SPSR, PC to return to
+0000076C: E16FF000    ;     MSR SPSR_cxsf, R0
+00000770: E8FD7FFF    ;     POP {R0-LR}^ ; pop R0-LR_usr 
+00000774:             ; 
+00000774: E1B0F00E    ;     MOVS PC, LR ; return PC to new thread and restore its status
+00000778:             ; INCLUDE standard_io.s
+00000778:             ; ; v7.0
+00000778:             ; ; Changelog:
+00000778:             ; ; - Changed write_char so that the input, R0, holds the ASCII value and not a pointer to an ASC
+                      ; II value
+00000778:             ; ; - Changed write_string to accommodate above change
+00000778:             ; 
+00000778:             ; INCLUDE character_definitions.s 
+00000778:             ; ; v3.0
+00000778:             ; ; Changelog:
+00000778:             ; _NEWLINE EQU &0A
+00000778:             ; _CLEAR_DISPLAY EQU &01
+00000778:             ; NEWLINE_INSTRUCTION EQU &A8
+00000778:             ; ; includes special characters such as NEWLINE for translation to an LCD newline
+00000778:             ; 
+00000778:             ; INCLUDE bit_mask_definitions.s
+00000778:             ; ; v7.0
+00000778:             ; ; Changelog:
+00000778:             ; ; - Add system mode bm
+00000778:             ; ; - Added BM_debounce_register_press & unpress. These are for the values to check our shifting 
+                      ; byte-buffers, 
+00000778:             ; ;       to see if we consider a button pressed or unpressed. 
+00000778:             ; 
+00000778:             ; BM_LED_Enable EQU &10 ; Bit for enabling/disabling LEDs on board
+00000778:             ; BM_Status EQU &80     ; Status, bit 7, of port A
+00000778:             ; BM_R_NOTW EQU &4      ; R/-W of port B
+00000778:             ; BM_RS EQU &2          ; RS of port B
+00000778:             ; BM_Enable_Interface EQU &1 ; Enable bit of port B
+00000778:             ; BM_button_upper EQU &40 ; Upper button enable bit of port B
+00000778:             ; BM_button_lower EQU &80 ; Lower button enable bit of port B
+00000778:             ; 
+00000778:             ; BM_svc_mode EQU &13
+00000778:             ; BM_user_mode EQU &10
+00000778:             ; BM_system_mode EQU &1F
+00000778:             ; BM_interrupt_mode EQU &12
+00000778:             ; BM_BIC_for_usr_mode EQU &4
+00000778:             ; 
+00000778:             ; BM_set_output_kb_matrix_wires EQU &F0
+00000778:             ; BM_isolate_key_value EQU &F0
+00000778:             ; BM_kb_enable_1_4_7_ASTERISK EQU &80
+00000778:             ; BM_kb_enable_2_5_8_0 EQU &40
+00000778:             ; BM_kb_enable_3_6_9_HASH EQU &20
+00000778:             ; 
+00000778:             ; BM_KB_top_row_pressed EQU &1
+00000778:             ; BM_KB_bottom_row_pressed EQU &8
+00000778:             ; 
+00000778:             ; BM_debounce_register_press EQU &FF
+00000778:             ; BM_debounce_register_unpress EQU &00
+00000778:             ; ; includes bit masks for port A/B configuration
+00000778:             ; 
+00000778:             ; Port_A EQU &10000000
+00000778:             ; timer_counter_port EQU &10000008
+00000778:             ; 
+00000778:             ; ; --------------- FUNCTIONS -----------------
+00000778:             ; write_string
+00000778:             ;     ; CHANGED (22nd March, 2023, Exercise 7): Change write_string to use write_char with R0 val
+                      ; ue (not pointer)
+00000778:             ;     ; DESCRIPTION: Takes a pointer to a string and outputs it entirely, stopping when a 0 is fo
+                      ; und. Uses 'write_character'.
+00000778:             ;     ; INPUT: R0 = Pointer to first char of string.
+00000778:             ;     ; All registers are restored after usage (including original inputs)
+00000778: E92D4003    ;     PUSH {R0, R1, LR}
+0000077C:             ; 
+0000077C: E1A01000    ;     MOV R1, R0 ; R1 is now going to be used as a pointer to the char to print
+00000780:             ;     
+00000780:             ;     print_loop 
+00000780: E4D10001    ;         LDRB R0, [R1], #1    
+00000784: E3500000    ;         CMP R0, #0
+00000788: 0A000001    ;         BEQ end_print_loop ; end of string
+0000078C: EB000001    ;         BL write_character
+00000790: EAFFFFFA    ;         B print_loop
+00000794:             ;     end_print_loop
+00000794:             ; 
+00000794: E8BD8003    ;     POP  {R0, R1, PC}
+00000798:             ; 
+00000798:             ; write_character
+00000798:             ;     ; CHANGED (22nd March, 2023, Exercise 7): Change write_char input R0 to hold char value (no
+                      ; t pointer)
+00000798:             ;     ; DESCRIPTION: Takes an ASCII character and outputs to the LCD display.
+00000798:             ;     ; INPUT: R0 = character value
+00000798:             ;     ; All registers are restored after usage (including original inputs)
+00000798: E92D41FE    ;     PUSH {R1-R8, LR}
+0000079C:             ; 
+0000079C: E3A04201    ;     MOV R4, #Port_A
+000007A0:             ; 
+000007A0:             ;     poll_LCD
+000007A0: E5D41004    ;         LDRB R1, [R4, #4]
+000007A4: E3811004    ;         ORR R1, R1, #BM_R_NOTW ;  R/-W = 1
+000007A8: E3C11002    ;         BIC R1, R1, #BM_RS ; RS=0
+000007AC:             ; 
+000007AC:             ; 
+000007AC: E3811001    ;         ORR R1, R1, #BM_Enable_Interface  ; E = 1
+000007B0: E5C41004    ;         STRB R1, [R4, #4]
+000007B4:             ; 
+000007B4: E5545000    ;         LDRB R5, [R4]   ; Load A into R5
+000007B8:             ; 
+000007B8: E3C11001    ;         BIC R1, R1, #BM_Enable_Interface  ; E = 0
+000007BC: E5C41004    ;         STRB R1, [R4, #4]
+000007C0:             ; 
+000007C0: E2053080    ;         AND R3, R5, #BM_Status ; check the status, bit 7
+000007C4:             ; 
+000007C4: E3530000    ;         CMP R3, #0 ; Compare to see if status is clear
+000007C8: 1AFFFFF4    ;         BNE poll_LCD   ; bit 7 of status byte is high
+000007CC:             ; 
+000007CC:             ;     write
+000007CC: E3811002    ;         ORR R1, R1, #BM_RS ; RS=1
+000007D0: E3C11004    ;         BIC R1, R1, #BM_R_NOTW ; R/-W =bit 0
+000007D4: E5C41004    ;         STRB R1, [R4, #4]
+000007D8:             ; 
+000007D8:             ;         ;LDRB R6, [R0] ; Load character from pointer
+000007D8:             ;         ; CHANGED (22nd March, 2023, Exercise 7): Change write_char input R0 to hold char value
+                      ;  (not pointer)
+000007D8:             ; 
+000007D8: E1A06000    ;         MOV R6, R0 ; copy input character
+000007DC:             ; 
+000007DC: E356000A    ;         CMP R6, #_NEWLINE ; ASCII NEWLINE, needs to replaced with LCD's newline instruction
+000007E0: 1A000001    ;         BNE skip_newline
+000007E4:             ;             ; We have a new line character
+000007E4: E3A060A8    ;             MOV R6, #NEWLINE_INSTRUCTION
+000007E8: E3C11002    ;             BIC R1, R1, #BM_RS ; RS = 0, write to control register to set cursor
+000007EC:             ;         skip_newline
+000007EC:             ; 
+000007EC: E3560001    ;         CMP R6, #_CLEAR_DISPLAY ; 0x01
+000007F0: 1A000000    ;         BNE skip_clear_display
+000007F4:             ;             ; We have a clear display instruction
+000007F4: E3C11002    ;             BIC R1, R1, #BM_RS ; RS = 0, write to control register to send instruction
+000007F8:             ; 
+000007F8:             ;         skip_clear_display
+000007F8: E5446000    ;         STRB R6, [R4] ; put char from R6 in Port_A
+000007FC:             ; 
+000007FC: E3811001    ;         ORR R1, R1, #BM_Enable_Interface ; E = 1
+00000800: E3C11010    ;         BIC R1, R1, #BM_LED_Enable ; LED ENABLE = 0
+00000804: E5C41004    ;         STRB R1, [R4, #4] ; Store R1 with E=1
+00000808:             ; 
+00000808: E3C11001    ;         BIC R1, R1, #BM_Enable_Interface ; E =0
+0000080C: E5C41004    ;         STRB R1, [R4, #4]
+00000810:             ; 
+00000810: E8BD81FE    ;     POP {R1-R8, PC}
+00000814:             ; 
+00000814:             ; 
+00000814:             ; wait_ms
+00000814:             ;     ; DESCRIPTION: Waits a variable amount of ms
+00000814:             ;     ; INPUT: R0 is the amount of ms to wait
+00000814: E92D407F    ;     PUSH {R0-R6, LR}
+00000818: E3A06281    ;     MOV R6, #timer_counter_port
+0000081C: E1A05000    ;     MOV R5, R0 ; R5 <= time to wait in ms
+00000820:             ; 
+00000820:             ;     ; R0 = 'previous time'
+00000820:             ;     ; R1 = 'currently polled time'
+00000820:             ;     ; R3 = current diff
+00000820:             ;     ; R4 = counts total (we stop when >=R5)
+00000820: E5560000    ;     LDRB R0, [R6]
+00000824:             ;     poll_timer
+00000824: E5561000    ;         LDRB R1, [R6] ; load current time into R1
+00000828:             ;         
+00000828: E0413000    ;         SUB R3, R1, R0 ; By default, R3 = current_time-prev_time
+0000082C: E1500001    ;         CMP R0, R1
+00000830:             ;         
+00000830:             ; 
+00000830:             ;         ; If R0 > R1, we have wrapped around
+00000830: DA000002    ;         BLE skip_wrap_case            
+00000834:             ;             ; time diff is 255-prev_time + current_time as it's wrapped around
+00000834: E3A030FF    ;             MOV R3, #255
+00000838: E0433000    ;             SUB R3, R3, R0 ; R3=255-prev_time
+0000083C: E0833001    ;             ADD R3, R3, R1 ; R3 += current_time
+00000840:             ; 
+00000840:             ;         skip_wrap_case
+00000840: E0844003    ;         ADD R4, R4, R3
+00000844:             ; 
+00000844: E1A00001    ;         MOV R0, R1 ; current time saved to prev_time for next iteration
+00000848: E1540005    ;         CMP R4, R5
+0000084C: BAFFFFF4    ;         BLT poll_timer
+00000850:             ;         
+00000850:             ; 
+00000850: E8BD807F    ;     POP {R0-R6, PC}
+00000854:             ; 
+00000854:             ; 
+00000854:             ; 
+00000854:             ; 
+00000854:             ; 
+00000854:             ; ; Description of program:
+00000854:             ; ; This is interesting. We have 3 threads in the pool. program1.s will increment a memory locati
+                      ; on by 1 as fast as possible,
+00000854:             ; ; program2.s will increment a different location by 2 also as fast as possible.
+00000854:             ; ; However, program1.s is FIRST in the queue at the beginning (aka it runs before prog2 does)
+00000854:             ; ; program3.s checks for the first one to reach 1,000,000 and outputs the winner.
+00000854:             ; 
+00000854:             ; 
+00000854:             ; init
+00000854: EF000006    ;     SVC call_BEGIN_ATOMIC_BLOCK ; don't want to be interrupted while setting up the threads
+00000858:             ; 
+00000858: E28F0F4A    ;     ADRL R0, prog1
+0000085C: E28F1F49    ;     ADRL R1, prog1_stack
+00000860: EF000008    ;     SVC call_add_thread_to_pool ; add prog1 to thread pool to allow context switching to it
+00000864:             ; 
+00000864:             ; 
+00000864: E28F0F4D    ;     ADRL R0, prog2
+00000868: E28F1F91    ;     ADRL R1, prog2_stack
+0000086C: EF000008    ;     SVC call_add_thread_to_pool ; add prog2 to thread pool to allow context switching to it
+00000870:             ; 
+00000870: E28F0F9F    ;     ADRL R0, prog3
+00000874: E28F1E3D    ;     ADRL R1, prog3_stack
+00000878: EF000008    ;     SVC call_add_thread_to_pool ; add prog3
+0000087C:             ;   
+0000087C:             ; 
+0000087C: EF000007    ;     SVC call_END_ATOMIC_BLOCK
+00000880:             ; 
+00000880: EF000009    ;     SVC call_exit_thread ; throw away setup thread
+00000884:             ; 
+00000884:             ; 
+00000884:             ; INCLUDE program1.s
+00000884: 00000000    ; thing1 DEFW 0
+00000888:             ; 
+00000888:             ; DEFS 256
+00000988:             ; prog1_stack
+00000988:             ; 
+00000988:             ; 
+00000988:             ; prog1
+00000988: E24FD008    ;     ADRL SP, prog1_stack
+0000098C: E24F0E11    ;     ADR R0, thing1
+00000990:             ; 
+00000990:             ;     prog1_loop
+00000990: E2811001    ;         ADD R1, R1, #1
+00000994: E5001000    ;         STR R1, [R0]
+00000998: EAFFFFFC    ;         B prog1_loop
+0000099C:             ; 
+0000099C:             ; INCLUDE program2.s
+0000099C: 00000000    ; thing2 DEFW 0
+000009A0:             ; prog2
+000009A0: E28FDF43    ;     ADRL SP, prog2_stack
+000009A4: E24F0010    ;     ADR R0, thing2
+000009A8:             ; 
+000009A8:             ; 
+000009A8:             ;     prog2_loop
+000009A8: E2811002    ;         ADD R1, R1, #2
+000009AC: E5001000    ;         STR R1, [R0]
+000009B0: EAFFFFFC    ;         B prog2_loop
+000009B4:             ; 
+000009B4:             ; DEFS 256
+00000AB4:             ; prog2_stack
+00000AB4:             ; INCLUDE program3.s
+00000AB4: 52 61 63 65 ; first_message DEFB "Race:\nFirst to 1000000\0"
+00000AB8: 3A 0A 46 69 ; 
+00000ABC: 72 73 74 20 ; 
+00000AC0: 74 6F 20 31 ; 
+00000AC4: 30 30 30 30 ; 
+00000AC8: 30 30 00    ; 
+00000ACB: 0A 69 73 20 ; result_message DEFB "\nis the winner!\0"
+00000ACF: 74 68 65 20 ; 
+00000AD3: 77 69 6E 6E ; 
+00000AD7: 65 72 21 00 ; 
+00000ADB: 54 68 72 65 ; thread1_str DEFB "Thread 1\0"
+00000ADF: 61 64 20 31 ; 
+00000AE3: 00          ; 
+00000AE4: 54 68 72 65 ; thread2_str DEFB "Thread 2\0"
+00000AE8: 61 64 20 32 ; 
+00000AEC: 00          ; 
+00000AF0:             ; ALIGN
+00000AF0:             ; 
+00000AF0: 000F4240    ; WINNING_VALUE DEFW 1000000
+00000AF4:             ; 
+00000AF4:             ; prog3
+00000AF4: E28FDE15    ;     ADR SP, prog3_stack
+00000AF8: E24F004C    ;     ADR R0, first_message
+00000AFC: EF000000    ;     SVC call_write_string
+00000B00:             ; 
+00000B00: E24F4FA1    ;     ADRL R4, thing1
+00000B04: E24F5E17    ;     ADRL R5, thing2
+00000B08:             ; 
+00000B08:             ; 
+00000B08: E24F3020    ;     ADR R3, WINNING_VALUE
+00000B0C: E5133000    ;     LDR R3, [R3]
+00000B10:             ; 
+00000B10:             ;     check_for_winner
+00000B10: E5142000    ;         LDR R2, [R4]
+00000B14: E1520003    ;         CMP R2, R3
+00000B18: A24F0045    ;         ADRGE R0, thread1_str
+00000B1C: AA000005    ;         BGE win
+00000B20:             ; 
+00000B20: E5152000    ;         LDR R2, [R5]
+00000B24: E1520003    ;         CMP R2, R3
+00000B28: A24F004C    ;         ADRGE R0, thread2_str
+00000B2C: AA000001    ;         BGE win
+00000B30:             ; 
+00000B30: EF00000A    ;         SVC call_yield ; yield to other threads if we haven't got a winner
+00000B34: EAFFFFF5    ;         B check_for_winner
+00000B38:             ; 
+00000B38:             ;     win
+00000B38: EF000002    ;         SVC call_clear_display
+00000B3C: EF000000    ;         SVC call_write_string ; write name of winning thread
+00000B40: E24F007D    ;         ADR R0, result_message
+00000B44: EF000000    ;         SVC call_write_string ; write result message after
+00000B48: EF000003    ;         SVC call_hang
+00000B4C:             ; 
+00000B4C:             ; DEFS 256
+00000C4C:             ; prog3_stack
+
+Symbol Table: Labels
+: Max_SVC                           0000000B  Value
+: call_write_string                 00000000  Value
+: call_write_char                   00000001  Value
+: call_clear_display                00000002  Value
+: call_hang                         00000003  Value
+: call_wait_ms                      00000004  Value
+: call_load_port_B                  00000005  Value
+: call_BEGIN_ATOMIC_BLOCK           00000006  Value
+: call_END_ATOMIC_BLOCK             00000007  Value
+: call_add_thread_to_pool           00000008  Value
+: call_exit_thread                  00000009  Value
+: call_yield                        0000000A  Value
+: INTERRUPT_enable_timer_compare    00000001  Value
+: disable_interrupts                00000080  Value
+: base_IO_address                   10000000  Value
+: OFFSET_enable_interrupts_port     0000001C  Value
+: port_B_address                    10000004  Value
+: timer_compare_port                1000000C  Value
+: SVC_init                          0000001C  Local -- ARM
+: undefined_instruction             00000064  Local -- ARM
+: SVC_handler                       00000068  Local -- ARM
+: table_calc                        00000078  Local -- ARM
+: SVC_jump_table                    00000084  Local -- ARM
+: SVC_0                             000000B0  Local -- ARM
+: SVC_1                             000000B8  Local -- ARM
+: SVC_2                             000000C0  Local -- ARM
+: SVC_3                             000000D4  Local -- ARM
+: SVC_4                             000000D8  Local -- ARM
+: SVC_5                             000000E0  Local -- ARM
+: SVC_6                             000000F4  Local -- ARM
+: SVC_7                             0000010C  Local -- ARM
+: SVC_8                             00000124  Local -- ARM
+: setup_TS_keep_pushing_blank       00000140  Local -- ARM
+: SVC_9                             00000168  Local -- ARM
+: SVC_10                            00000178  Local -- ARM
+: SVC_exit                          000001A8  Local -- ARM
+: supervisor_stack_top              000003AC  Local -- ARM
+: interrupt_stack_top               000005B0  Local -- ARM
+: TIMER_STATUS_counting             00000000  Value
+: TIMER_STATUS_pause                00000001  Value
+: TIMER_STATUS_reset                00000002  Value
+: TIMER_DISPLAY_sec_digit_0         00000013  Value
+: TIMER_DISPLAY_sec_digit_1         00000012  Value
+: TIMER_DISPLAY_min_digit_0         00000007  Value
+: TIMER_DISPLAY_min_digit_1         00000006  Value
+: minute_passed                     0000003C  Value
+: second_passed                     0000000A  Value
+: hundred_ms                        00000064  Value
+: TS_BUFFER_MAX_CAPACITY            00000003  Value
+: TS_BUFFER_setup                   000005B4  Local -- ARM
+: TS_BUFFER_enqueue                 000005D0  Local -- ARM
+: TS_BUFFER_dequeue                 0000061C  Local -- ARM
+: TS_CIRC_BUFFER_LENGTH             0000066C  Local -- ARM
+: TS_CIRC_BUFFER_HEAD               00000670  Local -- ARM
+: TS_CIRC_BUFFER_TAIL               00000674  Local -- ARM
+: TS_CIRC_BUFFER                    000006F8  Local -- ARM
+: interrupt_active_port_offset      00000018  Value
+: timer_compare_interrupt_active    00000001  Value
+: timer_counter_port                10000008  Value
+: FPGA_PIO_base_address             20000000  Value
+: OFFSET_FPGA_PIO_kb_port_data      00000002  Value
+: OFFSET_FPGA_PIO_kb_port_control   00000003  Value
+: OFFSET_PIO_kb_port_IO_control     00000001  Value
+: interrupt_handler                 000006FC  Local -- ARM
+: ISR_context_switch                00000720  Local -- ARM
+: ISR_context_switch_nosave         0000073C  Local -- ARM
+: TIME_PER_THREAD                   00000002  Value
+: _NEWLINE                          0000000A  Value
+: _CLEAR_DISPLAY                    00000001  Value
+: NEWLINE_INSTRUCTION               000000A8  Value
+: BM_LED_Enable                     00000010  Value
+: BM_Status                         00000080  Value
+: BM_R_NOTW                         00000004  Value
+: BM_RS                             00000002  Value
+: BM_Enable_Interface               00000001  Value
+: BM_button_upper                   00000040  Value
+: BM_button_lower                   00000080  Value
+: BM_svc_mode                       00000013  Value
+: BM_user_mode                      00000010  Value
+: BM_system_mode                    0000001F  Value
+: BM_interrupt_mode                 00000012  Value
+: BM_BIC_for_usr_mode               00000004  Value
+: BM_set_output_kb_matrix_wires     000000F0  Value
+: BM_isolate_key_value              000000F0  Value
+: BM_kb_enable_1_4_7_ASTERISK       00000080  Value
+: BM_kb_enable_2_5_8_0              00000040  Value
+: BM_kb_enable_3_6_9_HASH           00000020  Value
+: BM_KB_top_row_pressed             00000001  Value
+: BM_KB_bottom_row_pressed          00000008  Value
+: BM_debounce_register_press        000000FF  Value
+: BM_debounce_register_unpress      00000000  Value
+: Port_A                            10000000  Value
+: write_string                      00000778  Local -- ARM
+: print_loop                        00000780  Local -- ARM
+: end_print_loop                    00000794  Local -- ARM
+: write_character                   00000798  Local -- ARM
+: poll_LCD                          000007A0  Local -- ARM
+: write                             000007CC  Local -- ARM
+: skip_newline                      000007EC  Local -- ARM
+: skip_clear_display                000007F8  Local -- ARM
+: wait_ms                           00000814  Local -- ARM
+: poll_timer                        00000824  Local -- ARM
+: skip_wrap_case                    00000840  Local -- ARM
+: init                              00000854  Local -- ARM
+: thing1                            00000884  Local -- ARM
+: prog1_stack                       00000988  Local -- ARM
+: prog1                             00000988  Local -- ARM
+: prog1_loop                        00000990  Local -- ARM
+: thing2                            0000099C  Local -- ARM
+: prog2                             000009A0  Local -- ARM
+: prog2_loop                        000009A8  Local -- ARM
+: prog2_stack                       00000AB4  Local -- ARM
+: first_message                     00000AB4  Local -- ARM
+: result_message                    00000ACB  Local -- ARM
+: thread1_str                       00000ADB  Local -- ARM
+: thread2_str                       00000AE4  Local -- ARM
+: WINNING_VALUE                     00000AF0  Local -- ARM
+: prog3                             00000AF4  Local -- ARM
+: check_for_winner                  00000B10  Local -- ARM
+: win                               00000B38  Local -- ARM
+: prog3_stack                       00000C4C  Local -- ARM

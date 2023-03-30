@@ -8,17 +8,18 @@
 ; - Added SVC for exiting thread
 ; - Added SVC for creating new thread
 
-Max_SVC EQU &10
+Max_SVC EQU 11
 call_write_string EQU 0
 call_write_char EQU 1
 call_clear_display EQU 2
-call_terminate EQU 3
+call_hang EQU 3
 call_wait_ms EQU 4
 call_load_port_B EQU 5
 call_BEGIN_ATOMIC_BLOCK EQU 6
 call_END_ATOMIC_BLOCK EQU 7
 call_add_thread_to_pool EQU 8
 call_exit_thread EQU 9
+call_yield EQU 10
 
 INTERRUPT_enable_timer_compare EQU 1
 
@@ -31,8 +32,6 @@ port_B_address EQU &10000004
 timer_compare_port EQU &1000000C
 
 
-user_mode EQU &D0
-interrupt_mode EQU &D2
 
 B SVC_init
 B undefined_instruction
@@ -48,7 +47,7 @@ SVC_init
     BL TS_BUFFER_setup ; set up thread stack buffer pointers to enable enqueue, dequeue
 
     ; switch to interrupt mode first to set up stack etc.
-    MOV R14, #interrupt_mode
+    MOV R14, #BM_interrupt_mode
     MSR CPSR, R14 ; switch to interrupt mode
 
     ADRL SP, interrupt_stack_top ; set up interrupt mode stack
@@ -63,7 +62,7 @@ SVC_init
     MOV R0, #0
     MOV R1, #0 ; reset registers to 0 for convention
 
-    MOV R14, #user_mode ; set up user mode
+    MOV R14, #BM_user_mode ; set up user mode
     BIC R14, R14, #disable_interrupts  ; Clear the disable interrupts bit, thus ENABLING them.
     
     MSR SPSR, R14 ; switch to user mode
@@ -87,13 +86,14 @@ table_calc    ADDLT R14, PC, R14, LSL #2
 SVC_jump_table DEFW SVC_0 ; print string
                DEFW SVC_1 ; print char
                DEFW SVC_2 ; clear display
-               DEFW SVC_3 ; terminate prog
+               DEFW SVC_3 ; hang prog
                DEFW SVC_4 ; wait variable amount of ms
                DEFW SVC_5 ; load Port B into R0.
                DEFW SVC_6 ; disable interrupts
                DEFW SVC_7 ; enable interrupts
                DEFW SVC_8 ; add thread to pool
                DEFW SVC_9 ; exit current thread and switch to next
+               DEFW SVC_10 ; yield to cpu
 SVC_0
     ; print string
     BL write_string
@@ -112,7 +112,7 @@ SVC_2
     B SVC_exit
 
 SVC_3
-    ; terminate program
+    ; hang program forever
     B .
 
 SVC_4
@@ -163,7 +163,7 @@ SVC_8
     MOV R5, SP
 
     ; Create a fresh user mode CPSR and store for now
-    MOV R2, #user_mode
+    MOV R2, #BM_user_mode
     BIC R2, R2, #disable_interrupts ; enable interrupts so the user program can be context switched
 
     ; -------------- SETUP thread stack for program --------------
@@ -191,19 +191,52 @@ SVC_8
     B SVC_exit
 
 SVC_9
+    POP {LR} ; LR is pushed by jump table
+    ; we need to pop it as we won't use SVC_exit (which normally pops it)
+
     ; exit current thread
     ; This is done by moving into interrupt mode, branching to the context switch BUT
     ; skipping the 'state saving' part of the switch.
     ; Effectively switch to next thread without saving (and enqueueing) 
     ; current one, therefore 'ending' it.
 
-    MOV R14, #interrupt_mode
+    MOV R14, #BM_interrupt_mode
     MSR CPSR, R14 ; switch to interrupt mode
 
     B ISR_context_switch_nosave
     ; no need for BL as we're not coming back
 
     ; no need for SVC_exit as the above branch will restore the state of the next available thread.
+
+SVC_10
+    ; yield to cpu
+    ; effectively force a context switch
+    ; problem: how do we do LR_irq = LR_svc so 
+    ;          that we correctly return to the right place after the yield
+    ; current solution: a lot of mode switching
+    
+    POP {LR}  ; restore original LR as it's been overwritten by jump table
+    ; also pop it off stack as it won't be popped by SVC_exit (because we aren't branching there)
+
+    PUSH {R0} ; to use as scratch register. NOTE: pushed to SP_svc
+
+    MOV R0, LR ; R0 = LR_svc
+
+    MOV R14, #BM_interrupt_mode
+    MSR CPSR, R14 ; switch to interrupt mode
+
+    MOV LR, R0 ; LR_irq = R0 = LR_svc
+
+    MOV R0, #BM_svc_mode
+    MSR CPSR, R0
+    
+    POP {R0} ; restore R0
+
+    MOV R14, #BM_interrupt_mode
+    MSR CPSR, R14 ; switch to interrupt mode
+    
+    B ISR_context_switch ; now force a context switch
+
 
 
 SVC_exit

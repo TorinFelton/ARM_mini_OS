@@ -12,6 +12,8 @@ BM_Enable_Interface EQU &1 ; Enable bit of port B
 BM_button_upper EQU &40 ; Upper button enable bit of port B
 BM_button_lower EQU &80 ; Lower button enable bit of port B
 
+BM_svc_mode EQU &13
+BM_user_mode EQU &10
 BM_system_mode EQU &1F
 BM_interrupt_mode EQU &12
 BM_BIC_for_usr_mode EQU &4
