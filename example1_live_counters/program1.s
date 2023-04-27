@@ -15,11 +15,9 @@ prog1
 
     MOV R8, #8
 
-    prog1_NUM_TO_STOP_AT EQU &10000
+    prog1_NUM_TO_STOP_AT EQU &AA0000
 
     prog1_loop
         ADD R1, R1, #1
         STR R1, [R0]
-        TEQ R1, #prog1_NUM_TO_STOP_AT
-        BNE prog1_loop
-    SVC call_exit_thread
+        B prog1_loop
