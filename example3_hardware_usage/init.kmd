@@ -736,28 +736,22 @@ KMD
 000007E4:             ; 
 000007E4:             ; 
 000007E4:             ; 
-000007E4:             ; ; Description of program:
-000007E4:             ; ; This is interesting. We have 3 threads in the pool. program1.s will increment a memory locati
-                      ; on by 1 as fast as possible,
-000007E4:             ; ; program2.s will increment a different location by 2 also as fast as possible.
-000007E4:             ; ; However, program1.s is FIRST in the queue at the beginning (aka it runs before prog2 does)
-000007E4:             ; ; program3.s checks for the first one to reach 1,000,000 and outputs the winner.
-000007E4:             ; 
 000007E4:             ; 
 000007E4:             ; init
 000007E4: EF000006    ;     SVC call_BEGIN_ATOMIC_BLOCK ; don't want to be interrupted while setting up the threads
 000007E8:             ; 
-000007E8: E28F0F4A    ;     ADRL R0, prog1
-000007EC: E28F1F49    ;     ADRL R1, prog1_stack
-000007F0: EF000008    ;     SVC call_add_thread_to_pool ; add prog1 to thread pool to allow context switching to it
+000007E8: E28F0F4B    ;     ADRL R0, divider_program
+000007EC: E28F1F49    ;     ADRL R1, divider_program_stack
+000007F0: EF000008    ;     SVC call_add_thread_to_pool ; add divider program to thread pool to allow context switching
+                      ;  to it
 000007F4:             ; 
 000007F4:             ; 
-000007F4: E28F0F4D    ;     ADRL R0, prog2
-000007F8: E28F1F91    ;     ADRL R1, prog2_stack
+000007F4: E28F0F5D    ;     ADRL R0, prog2
+000007F8: E28F1FA6    ;     ADRL R1, prog2_stack
 000007FC: EF000008    ;     SVC call_add_thread_to_pool ; add prog2 to thread pool to allow context switching to it
 00000800:             ; 
-00000800: E28F0D0A    ;     ADRL R0, prog3
-00000804: E28F1FF5    ;     ADRL R1, prog3_stack
+00000800: E28F0FAA    ;     ADRL R0, prog3
+00000804: E28F1D0F    ;     ADRL R1, prog3_stack
 00000808: EF000008    ;     SVC call_add_thread_to_pool ; add prog3
 0000080C:             ;   
 0000080C:             ; 
@@ -767,93 +761,173 @@ KMD
 00000814:             ; 
 00000814:             ; 
 00000814:             ; INCLUDE program1.s
-00000814: 00000000    ; thing1 DEFW 0
+00000814: 00000000    ; divider_program_result DEFW 0
 00000818:             ; 
 00000818:             ; DEFS 256
-00000918:             ; prog1_stack
+00000918:             ; divider_program_stack
 00000918:             ; 
 00000918:             ; 
-00000918:             ; prog1
-00000918: E24FD008    ;     ADRL SP, prog1_stack
-0000091C: E24F0E11    ;     ADR R0, thing1
+00000918:             ; HD_divider_io_RESET_INSTRUCTION EQU &1
+00000918:             ; HD_divider_io_STARTDIV_INSTRUCTION EQU &2
+00000918:             ; 
+00000918:             ; HD_divider_io_state_OK EQU &2
+00000918:             ; 
+00000918:             ; ; As this is a word in total (input_A + input_B = 32 bits)
+00000918:             ; ; we can just LDR from input_A address to capture both inputs
+00000918: AF FF       ; input_A DEFB &AF, &FF
+0000091A: 00 05       ; input_B DEFB &00, &05
+0000091C:             ; ; If the above was written as a DEFW it would be more confusing
+0000091C:             ; ; as it would be "DEFW &0500FFAF" to input 0xAFFF and 0x0005.
+0000091C:             ; 
+0000091C:             ; ; 0xAFFF divided by 0x0005 is 0x2333.
+0000091C:             ; ; We verify this division is successful at the end.
+0000091C:             ; ALIGN
+0000091C:             ; 
+0000091C:             ; 
+0000091C:             ; divider_program
+0000091C: E24FD00C    ;     ADRL SP, divider_program_stack
 00000920:             ; 
-00000920:             ;     prog1_loop
-00000920: E2811001    ;         ADD R1, R1, #1
-00000924: E5001000    ;         STR R1, [R0]
-00000928: EAFFFFFC    ;         B prog1_loop
-0000092C:             ; 
-0000092C:             ; INCLUDE program2.s
-0000092C: 00000000    ; thing2 DEFW 0
-00000930:             ; prog2
-00000930: E28FDF43    ;     ADRL SP, prog2_stack
-00000934: E24F0010    ;     ADR R0, thing2
-00000938:             ; 
-00000938:             ; 
-00000938:             ;     prog2_loop
-00000938: E2811002    ;         ADD R1, R1, #2
-0000093C: E5001000    ;         STR R1, [R0]
-00000940: EAFFFFFC    ;         B prog2_loop
-00000944:             ; 
-00000944:             ; DEFS 256
-00000A44:             ; prog2_stack
-00000A44:             ; INCLUDE program3.s
-00000A44: 49 74 27 73 ; first_message DEFB "It's a race.\nFirst to 1000000\0"
-00000A48: 20 61 20 72 ; 
-00000A4C: 61 63 65 2E ; 
-00000A50: 0A 46 69 72 ; 
-00000A54: 73 74 20 74 ; 
-00000A58: 6F 20 31 30 ; 
-00000A5C: 30 30 30 30 ; 
-00000A60: 30 00       ; 
-00000A62: 0A 69 73 20 ; result_message DEFB "\nis the winner!\0"
-00000A66: 74 68 65 20 ; 
-00000A6A: 77 69 6E 6E ; 
-00000A6E: 65 72 21 00 ; 
-00000A72: 54 68 72 65 ; thread1_str DEFB "Thread 1\0"
-00000A76: 61 64 20 31 ; 
-00000A7A: 00          ; 
-00000A7B: 54 68 72 65 ; thread2_str DEFB "Thread 2\0"
-00000A7F: 61 64 20 32 ; 
-00000A83: 00          ; 
-00000A84:             ; ALIGN
-00000A84:             ; 
-00000A84: 000F4240    ; WINNING_VALUE DEFW 1000000
-00000A88:             ; 
-00000A88:             ; prog3
-00000A88: E28FDE15    ;     ADR SP, prog3_stack
-00000A8C: E24F0050    ;     ADR R0, first_message
-00000A90: EF000000    ;     SVC call_write_string
-00000A94:             ; 
-00000A94: E24F4FA2    ;     ADRL R4, thing1
-00000A98: E24F5F5D    ;     ADRL R5, thing2
-00000A9C:             ; 
-00000A9C:             ; 
-00000A9C: E24F3020    ;     ADR R3, WINNING_VALUE
-00000AA0: E5133000    ;     LDR R3, [R3]
-00000AA4:             ; 
-00000AA4:             ;     check_for_winner
-00000AA4: E5142000    ;         LDR R2, [R4]
-00000AA8: E1520003    ;         CMP R2, R3
-00000AAC: A24F0042    ;         ADRGE R0, thread1_str
-00000AB0: AA000005    ;         BGE win
-00000AB4:             ; 
-00000AB4: E5152000    ;         LDR R2, [R5]
-00000AB8: E1520003    ;         CMP R2, R3
-00000ABC: A24F0049    ;         ADRGE R0, thread2_str
-00000AC0: AA000001    ;         BGE win
+00000920:             ;     ; some magic numbers to illustrate register state preservation
+00000920: E3A02011    ;     MOV R2, #17
+00000924: E3A03003    ;     MOV R3, #3
+00000928:             ;     ; end of magic numbers
+00000928:             ; 
+00000928: E3A04000    ;     MOV R4, #0 ; R4 is a counter for how many times we poll the divider before it finishes    
+0000092C: E24F5E12    ;     ADR R5, divider_program_result
+00000930:             ; 
+00000930: E3A06202    ;     MOV R6, #HD_divider_io_base
+00000934:             ; 
+00000934:             ; 
+00000934: E24F0024    ;     ADR R0, input_A
+00000938: E5100000    ;     LDR R0, [R0] ; first input is 0xAFAF, second is 0x0005
+0000093C:             ;     ; two inputs stored in one 32 bit register: 0xAFAF0005 to divide 0xAFAF by 0x0005
+0000093C:             ; 
+0000093C: EF00000B    ;     SVC call_divider_IN_send_data ; load R0 into divider inputs
+00000940:             ; 
+00000940:             ; 
+00000940: E3A00001    ;     MOV R0, #HD_divider_io_RESET_INSTRUCTION
+00000944: EF00000C    ;     SVC call_divider_IN_send_inst ; send reset to divider
+00000948:             ; 
+00000948: E3A00002    ;     MOV R0, #HD_divider_io_STARTDIV_INSTRUCTION
+0000094C: EF00000C    ;     SVC call_divider_IN_send_inst ; send 'start dividing' to divider
+00000950:             ;     
+00000950: EF00000A    ;     SVC call_yield ; Switch to other threads while we wait for division
+00000954:             ;     
+00000954:             ;     poll_HD_divider_io ; loop until we get OK (division is done) signal in divider_io_state byt
+                      ; e
+00000954: EF00000D    ;         SVC call_divider_OUT_recieve_state
+00000958: E2100002    ;         ANDS R0, R0, #HD_divider_io_state_OK
+0000095C:             ; 
+0000095C: 0AFFFFFC    ;         BEQ poll_HD_divider_io
+00000960:             ;     
+00000960: EF00000E    ;     SVC call_divider_OUT_recieve_data ; get result of division into R0
+00000964: E5050000    ;     STR R0, [R5]
+00000968:             ; 
+00000968: EF000009    ;     SVC call_exit_thread ; division is done.
+0000096C:             ; 
+0000096C:             ; INCLUDE program2.s
+0000096C: 00000000    ; thing2 DEFW 0
+00000970:             ; prog2
+00000970: E28FDE12    ;     ADRL SP, prog2_stack
+00000974: E24F0010    ;     ADR R0, thing2
+00000978:             ; 
+00000978:             ;     ; some magic numbers to illustrate register state preservation
+00000978: E3A0200A    ;     MOV R2, #10
+0000097C: E3A0300B    ;     MOV R3, #11
+00000980: E3A0400C    ;     MOV R4, #12
+00000984: E3A0500D    ;     MOV R5, #13
+00000988:             ; 
+00000988: E3A0800F    ;     MOV R8, #15 
+0000098C:             ; 
+0000098C:             ;     prog2_loop
+0000098C: E2811001    ;         ADD R1, R1, #1
+00000990: E5001000    ;         STR R1, [R0]
+00000994: EAFFFFFC    ;         B prog2_loop
+00000998:             ; 
+00000998:             ; DEFS 256
+00000A98:             ; prog2_stack
+00000A98:             ; INCLUDE program3.s
+00000A98:             ; CSWITCH_DELAY EQU 10
+00000A98:             ; 
+00000A98: 41 46 46 46 ; thread1_message DEFB "AFFF/5=\0"
+00000A9C: 2F 35 3D 00 ; 
+00000AA0: 0A 54 68 72 ; thread2_message DEFB "\nThread2:\0"
+00000AA4: 65 61 64 32 ; 
+00000AA8: 3A 00       ; 
+00000AAC:             ; ALIGN
+00000AAC:             ; 
+00000AAC: 00002333    ; expected_div_result DEFW &2333
+00000AB0:             ; 
+00000AB0:             ; prog3
+00000AB0: E28FDF45    ;     ADRL SP, prog3_stack
+00000AB4: E24F7FAA    ;     ADR R7, divider_program_result
+00000AB8: E24F8F55    ;     ADR R8, thing2
+00000ABC: E24F5018    ;     ADR R5, expected_div_result
+00000AC0: E5155000    ;     LDR R5, [R5]
 00000AC4:             ; 
-00000AC4: EF00000A    ;         SVC call_yield ; yield to other threads if we haven't got a winner
-00000AC8: EAFFFFF5    ;         B check_for_winner
-00000ACC:             ; 
-00000ACC:             ;     win
-00000ACC: EF000002    ;         SVC call_clear_display
-00000AD0: EF000000    ;         SVC call_write_string ; write name of winning thread
-00000AD4: E24F007A    ;         ADR R0, result_message
-00000AD8: EF000000    ;         SVC call_write_string ; write result message after
-00000ADC: EF000003    ;         SVC call_hang
+00000AC4:             ; 
+00000AC4:             ;     prog3_loop
+00000AC4: E3A0300A    ;         MOV R3, #CSWITCH_DELAY ; output every 10 times we are context switched to
+00000AC8: E2533001    ;         prog3_wait SUBS R3, R3, #1
+00000ACC: 1F00000A    ;             SVCNE call_yield ; yield to other threads if we don't want to output yet
+00000AD0: 1AFFFFFC    ;             BNE prog3_wait
+00000AD4:             ; 
+00000AD4:             ;         ; interrupts disabled, cannot be context-switched here
+00000AD4: EF000002    ;         SVC call_clear_display
+00000AD8:             ; 
+00000AD8: E24F0048    ;         ADR R0, thread1_message
+00000ADC: EF000000    ;         SVC call_write_string
 00000AE0:             ; 
-00000AE0:             ; DEFS 256
-00000BE0:             ; prog3_stack
+00000AE0:             ;         ; dirty binary to ASCII hex code from internet: 
+00000AE0:             ;         ; https://stackoverflow.com/questions/53400875/converting-integer-to-hex-string-in-arm-
+                      ; assembly
+00000AE0: E5174000    ;         LDR R4, [R7]
+00000AE4: E1A04804    ;         LSL R4, R4, #16 ; Shift so correct part is output below
+00000AE8: E3A06004    ;         MOV   r6, #4 ; CHANGED: only outputs 2 bytes of R4 (our div result is 16 bits)
+00000AEC:             ;         output_thing1
+00000AEC: E1A00E24    ;             MOV   r0, r4, LSR #28
+00000AF0:             ; 
+00000AF0: E1A04204    ;             MOV   r4, r4, LSL #4
+00000AF4:             ; 
+00000AF4: E2800030    ;             ADD   r0, r0, #48
+00000AF8: E350003A    ;             CMP   r0, #58              
+00000AFC: 22800007    ;             ADDHS r0, r0, #7           
+00000B00: EF000001    ;             SVC call_write_char
+00000B04:             ;             
+00000B04: E2566001    ;             SUBS  r6, r6, #1
+00000B08: 1AFFFFF7    ;             BNZ   output_thing1
+00000B0C:             ; 
+00000B0C:             ;             ; output next thread's counter
+00000B0C:             ; 
+00000B0C: E24F0074    ;             ADR R0, thread2_message
+00000B10: EF000000    ;             SVC call_write_string
+00000B14:             ; 
+00000B14: E5184000    ;             LDR R4, [R8]
+00000B18: E3A06008    ;             MOV   r6, #8
+00000B1C:             ;         output_thing2
+00000B1C: E1A00E24    ;             MOV   r0, r4, LSR #28
+00000B20:             ; 
+00000B20: E1A04204    ;             MOV   r4, r4, LSL #4
+00000B24:             ; 
+00000B24: E2800030    ;             ADD   r0, r0, #48
+00000B28: E350003A    ;             CMP   r0, #58              
+00000B2C: 22800007    ;             ADDHS r0, r0, #7           
+00000B30: EF000001    ;             SVC call_write_char
+00000B34:             ;             
+00000B34: E2566001    ;             SUBS  r6, r6, #1
+00000B38: 1AFFFFF7    ;             BNZ   output_thing2
+00000B3C:             ; 
+00000B3C:             ;         
+00000B3C:             ;         ; check if we have correct div result
+00000B3C:             ;         ; terminates if true
+00000B3C: E5174000    ;         LDR R4, [R7]
+00000B40: E1540005    ;         CMP R4, R5
+00000B44: 0F000003    ;             SVCEQ call_hang ; stop programs if result achieved.
+00000B48:             ;         
+00000B48: EAFFFFDD    ;         B prog3_loop
+00000B4C:             ; 
+00000B4C:             ; DEFS 128
+00000BCC:             ; prog3_stack
 
 Symbol Table: Labels
 : Max_SVC                           0000000F  Value
@@ -974,20 +1048,26 @@ Symbol Table: Labels
 : poll_timer                        000007B4  Local -- ARM
 : skip_wrap_case                    000007D0  Local -- ARM
 : init                              000007E4  Local -- ARM
-: thing1                            00000814  Local -- ARM
-: prog1_stack                       00000918  Local -- ARM
-: prog1                             00000918  Local -- ARM
-: prog1_loop                        00000920  Local -- ARM
-: thing2                            0000092C  Local -- ARM
-: prog2                             00000930  Local -- ARM
-: prog2_loop                        00000938  Local -- ARM
-: prog2_stack                       00000A44  Local -- ARM
-: first_message                     00000A44  Local -- ARM
-: result_message                    00000A62  Local -- ARM
-: thread1_str                       00000A72  Local -- ARM
-: thread2_str                       00000A7B  Local -- ARM
-: WINNING_VALUE                     00000A84  Local -- ARM
-: prog3                             00000A88  Local -- ARM
-: check_for_winner                  00000AA4  Local -- ARM
-: win                               00000ACC  Local -- ARM
-: prog3_stack                       00000BE0  Local -- ARM
+: divider_program_result            00000814  Local -- ARM
+: divider_program_stack             00000918  Local -- ARM
+: HD_divider_io_RESET_INSTRUCTION   00000001  Value
+: HD_divider_io_STARTDIV_INSTRUCTI  00000002  Value
+: HD_divider_io_state_OK            00000002  Value
+: input_A                           00000918  Local -- ARM
+: input_B                           0000091A  Local -- ARM
+: divider_program                   0000091C  Local -- ARM
+: poll_HD_divider_io                00000954  Local -- ARM
+: thing2                            0000096C  Local -- ARM
+: prog2                             00000970  Local -- ARM
+: prog2_loop                        0000098C  Local -- ARM
+: prog2_stack                       00000A98  Local -- ARM
+: CSWITCH_DELAY                     0000000A  Value
+: thread1_message                   00000A98  Local -- ARM
+: thread2_message                   00000AA0  Local -- ARM
+: expected_div_result               00000AAC  Local -- ARM
+: prog3                             00000AB0  Local -- ARM
+: prog3_loop                        00000AC4  Local -- ARM
+: prog3_wait                        00000AC8  Local -- ARM
+: output_thing1                     00000AEC  Local -- ARM
+: output_thing2                     00000B1C  Local -- ARM
+: prog3_stack                       00000BCC  Local -- ARM

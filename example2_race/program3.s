@@ -1,4 +1,4 @@
-first_message DEFB "Race:\nFirst to 1000000\0"
+first_message DEFB "It's a race.\nFirst to 1000000\0"
 result_message DEFB "\nis the winner!\0"
 thread1_str DEFB "Thread 1\0"
 thread2_str DEFB "Thread 2\0"

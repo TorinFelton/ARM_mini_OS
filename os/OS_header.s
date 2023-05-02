@@ -8,7 +8,7 @@
 ; - Added SVC for exiting thread
 ; - Added SVC for creating new thread
 
-Max_SVC EQU 11
+Max_SVC EQU 15
 call_write_string EQU 0
 call_write_char EQU 1
 call_clear_display EQU 2
@@ -20,6 +20,10 @@ call_END_ATOMIC_BLOCK EQU 7
 call_add_thread_to_pool EQU 8
 call_exit_thread EQU 9
 call_yield EQU 10
+call_divider_IN_send_data EQU 11
+call_divider_IN_send_inst EQU 12
+call_divider_OUT_recieve_state EQU 13
+call_divider_OUT_recieve_data EQU 14
 
 INTERRUPT_enable_timer_compare EQU 1
 
@@ -40,6 +44,7 @@ NOP
 NOP
 NOP
 B interrupt_handler
+B . ; fast interrupts
 
 SVC_init
     ADRL SP, supervisor_stack_top ; set supervisor sp (R13) to top of stack allocation
@@ -94,6 +99,10 @@ SVC_jump_table DEFW SVC_0 ; print string
                DEFW SVC_8 ; add thread to pool
                DEFW SVC_9 ; exit current thread and switch to next
                DEFW SVC_10 ; yield to cpu
+               DEFW SVC_11 ; load R0 into 2000_0000 (data input for divider)
+               DEFW SVC_12 ; load R0 into 2000_0006 (control input for divider)
+               DEFW SVC_13 ; load 2000_0006 into R0 (state output for divider)
+               DEFW SVC_14 ; load 2000_0004 into R0 (result output for divider)
 SVC_0
     ; print string
     BL write_string
@@ -208,6 +217,11 @@ SVC_9
 
     ; no need for SVC_exit as the above branch will restore the state of the next available thread.
 
+
+
+LOCALTEMP_passLR DEFW 0
+LOCALTEMP_passSPSR DEFW 0
+
 SVC_10
     ; yield to cpu
     ; effectively force a context switch
@@ -220,12 +234,18 @@ SVC_10
 
     PUSH {R0} ; to use as scratch register. NOTE: pushed to SP_svc
 
-    MOV R0, LR ; R0 = LR_svc
+    ADR R0, LOCALTEMP_passLR
+    STR LR, [R0] ; store LR_svc at LOCALTEMP_passLR
+    ; LR_svc (R14) can now be overwritten:
+    MRS R14, SPSR
+    STR R14, [R0, #(LOCALTEMP_passSPSR-LOCALTEMP_passLR)] ; store SPSR at LOCALTEMP_passSPSR
 
     MOV R14, #BM_interrupt_mode
     MSR CPSR, R14 ; switch to interrupt mode
 
-    MOV LR, R0 ; LR_irq = R0 = LR_svc
+    LDR LR, [R0] ; LR_irq = LOCALTEMP_passSVC
+    LDR R0, [R0, #(LOCALTEMP_passSPSR-LOCALTEMP_passLR)]
+    MSR SPSR, R0 ; SPSR_irq = LOCALTEMP_passSPSR
 
     MOV R0, #BM_svc_mode
     MSR CPSR, R0
@@ -237,17 +257,85 @@ SVC_10
     
     B ISR_context_switch ; now force a context switch
 
+HD_divider_io_base EQU &2000_0000
+OFFSET_HD_divider_io_control EQU &6
+OFFSET_HD_divider_io_result EQU &4
+OFFSET_HD_divider_io_state EQU &6
 
+
+SVC_11
+    ; FUNCTION: Load R0 into divider data input
+    ; INPUTS: R0
+    ; OUTPUTS: None, R0 is untouched
+
+    PUSH {R1}
+
+    MOV R1, #HD_divider_io_base
+    STR R0, [R1]
+
+    POP {R1}
+
+    B SVC_exit
+
+SVC_12
+    ; FUNCTION: Load R0 into divider control input
+    ; INPUTS: R0
+    ; OUTPUTS: none
+
+    PUSH {R1}
+
+    MOV R1, #HD_divider_io_base
+    STRB R0, [R1, #OFFSET_HD_divider_io_control]
+
+    POP {R1}
+    B SVC_exit
+
+SVC_13
+    ; FUNCTION: Load divider state into R0
+    ; INPUTS: none
+    ; OUTPUTS: R0 changed to divider state
+
+    PUSH {R1}
+
+    MOV R1, #HD_divider_io_base
+    LDRB R0, [R1, #OFFSET_HD_divider_io_state]
+
+    POP {R1}
+    B SVC_exit
+
+SHIFT_first_half_result EQU 8 
+; result = 2 bytes, therefore first half is 1 byte
+
+SVC_14
+    ; FUNCTION: Load divider result into R0
+    ; INPUTS: none
+    ; OUTPUTS: R0 changed to divider result
+
+    PUSH {R1}
+
+    MOV R1, #HD_divider_io_base
+    LDRB R0, [R1, #OFFSET_HD_divider_io_result]
+    LSL R0, R0, #SHIFT_first_half_result
+
+    ; Get second half of result
+    ; NOTE: We are loading into R1 so as not to overwrite the first half
+    ; of the result that is stored in R0.
+    LDRB R1, [R1, #(OFFSET_HD_divider_io_result + 1)]
+    ORR R0, R0, R1 ; combine both halves of the result
+
+    POP {R1}
+    B SVC_exit
 
 SVC_exit
     POP {PC}^
 
+DEFS 256
+interrupt_stack_top DEFW 0
 
 DEFS 512
 supervisor_stack_top DEFW 0
 
-DEFS 512
-interrupt_stack_top DEFW 0
+
 
 INCLUDE interrupts.s ; contains interrupt handler & routines
 INCLUDE standard_io.s

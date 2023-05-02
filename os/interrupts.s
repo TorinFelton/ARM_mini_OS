@@ -20,6 +20,13 @@ OFFSET_PIO_kb_port_IO_control EQU 1
 
 
 interrupt_handler
+    ADRL SP, interrupt_stack_top
+        ; When a context switch happens, the interrupt SP is changed to the thread's SP
+        ; Therefore we need to make sure the SP_irq uses the interrupt stack at first, to avoid
+        ; corrupting a thread SP.
+        ; It is fine to set this to the static memory location 'interrupt_stack_top' 
+        ; as nothing useful should be stored on the interrupt stack after/before an interrupt.
+
     SUB LR, LR, #4 ; LR points ahead when interrupt happens so we need to correct it
     PUSH {R0-R1, LR}
 
@@ -38,9 +45,12 @@ interrupt_handler
 ISR_context_switch
     ; Set up timer for next interrupt and execute context switch
 
-    ; get user SP
+    ; get user SP and push onto interrupt stack
     PUSH {SP}^
     LDR SP, [SP]
+        ; Why not POP {SP}? Because this will decrement SP_usr and not SP_irq.
+        ; SP_irq is forgotten at this point, because when we interrupt again we will reset SP_irq to
+        ; 'interrupt_stack_top', starting at the beginning again.
 
     PUSH {R0-LR}^ ; store R0-LR_usr onto the user program's stack
     MRS R0, SPSR ; get user's CPSR
