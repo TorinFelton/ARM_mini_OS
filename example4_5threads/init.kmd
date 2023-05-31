@@ -741,142 +741,231 @@ KMD
 00000968:             ; init
 00000968: EF000006    ;     SVC call_BEGIN_ATOMIC_BLOCK ; don't want to be interrupted while setting up the threads
 0000096C:             ; 
-0000096C: E28F0F4A    ;     ADRL R0, prog1
-00000970: E28F1F49    ;     ADRL R1, prog1_stack
+0000096C: E28F0F52    ;     ADRL R0, prog1
+00000970: E28F1F51    ;     ADRL R1, prog1_stack
 00000974: EF000008    ;     SVC call_add_thread_to_pool ; add prog1 to thread pool to allow context switching to it
 00000978:             ; 
 00000978:             ; 
-00000978: E28F0F51    ;     ADRL R0, prog2
-0000097C: E28F1F9A    ;     ADRL R1, prog2_stack
+00000978: E28F0F59    ;     ADRL R0, prog2
+0000097C: E28F1FA2    ;     ADRL R1, prog2_stack
 00000980: EF000008    ;     SVC call_add_thread_to_pool ; add prog2 to thread pool to allow context switching to it
 00000984:             ; 
-00000984: E28F0F9D    ;     ADRL R0, prog3
-00000988: E28F1FDD    ;     ADRL R1, prog3_stack
+00000984: E28F0FA1    ;     ADRL R0, prog3
+00000988: E28F1FEA    ;     ADRL R1, prog3_stack
 0000098C: EF000008    ;     SVC call_add_thread_to_pool ; add prog3
-00000990:             ;   
 00000990:             ; 
-00000990: EF000007    ;     SVC call_END_ATOMIC_BLOCK
-00000994:             ; 
-00000994: EF000009    ;     SVC call_exit_thread ; throw away setup thread
-00000998:             ; 
-00000998:             ; 
-00000998:             ; INCLUDE program1.s
-00000998: 00000000    ; thing1 DEFW 0
-0000099C:             ; 
-0000099C:             ; DEFS 256
-00000A9C:             ; prog1_stack
-00000A9C:             ; 
-00000A9C:             ; 
-00000A9C:             ; prog1
-00000A9C: E24FD008    ;     ADRL SP, prog1_stack
-00000AA0: E24F0E11    ;     ADR R0, thing1
-00000AA4:             ; 
-00000AA4:             ;     ; some magic numbers to illustrate register state preservation
-00000AA4: E3A03003    ;     MOV R3, #3
-00000AA8: E3A04004    ;     MOV R4, #4
-00000AAC: E3A05005    ;     MOV R5, #5
-00000AB0:             ; 
-00000AB0: E3A08008    ;     MOV R8, #8
-00000AB4:             ; 
-00000AB4:             ; 
-00000AB4:             ;     prog1_loop
-00000AB4: E2811001    ;         ADD R1, R1, #1
-00000AB8: E5001000    ;         STR R1, [R0]
-00000ABC: EAFFFFFC    ;         B prog1_loop
-00000AC0:             ; 
-00000AC0:             ; INCLUDE program2.s
-00000AC0: 00000000    ; thing2 DEFW 0
-00000AC4:             ; prog2
-00000AC4: E28FDE12    ;     ADRL SP, prog2_stack
-00000AC8: E24F0010    ;     ADR R0, thing2
-00000ACC:             ; 
-00000ACC:             ;     ; some magic numbers to illustrate register state preservation
-00000ACC: E3A0200A    ;     MOV R2, #10
-00000AD0: E3A0300B    ;     MOV R3, #11
-00000AD4: E3A0400C    ;     MOV R4, #12
-00000AD8: E3A0500D    ;     MOV R5, #13
-00000ADC:             ; 
-00000ADC: E3A0800F    ;     MOV R8, #15 
+00000990: E28F0FE9    ;     ADRL R0, prog4
+00000994: E28F10C8    ;     ADRL R1, prog4_stack
+00000998: E2811B01    ; 
+0000099C: EF000008    ;     SVC call_add_thread_to_pool ; add prog2 to thread pool to allow context switching to it
+000009A0:             ; 
+000009A0: E28F0D13    ;     ADRL R0, prog5
+000009A4: E28F1FAD    ;     ADRL R1, prog5_stack
+000009A8: E2811B01    ; 
+000009AC: EF000008    ;     SVC call_add_thread_to_pool ; add prog2 to thread pool to allow context switching to it
+000009B0:             ;   
+000009B0:             ; 
+000009B0: EF000007    ;     SVC call_END_ATOMIC_BLOCK
+000009B4:             ; 
+000009B4: EF000009    ;     SVC call_exit_thread ; throw away setup thread
+000009B8:             ; 
+000009B8:             ; 
+000009B8:             ; INCLUDE program1.s
+000009B8: 00000000    ; thing1 DEFW 0
+000009BC:             ; 
+000009BC:             ; DEFS 256
+00000ABC:             ; prog1_stack
+00000ABC:             ; 
+00000ABC:             ; 
+00000ABC:             ; prog1
+00000ABC: E24FD008    ;     ADRL SP, prog1_stack
+00000AC0: E24F0E11    ;     ADR R0, thing1
+00000AC4:             ; 
+00000AC4:             ;     ; some magic numbers to illustrate register state preservation
+00000AC4: E3A03003    ;     MOV R3, #3
+00000AC8: E3A04004    ;     MOV R4, #4
+00000ACC: E3A05005    ;     MOV R5, #5
+00000AD0:             ; 
+00000AD0: E3A08008    ;     MOV R8, #8
+00000AD4:             ; 
+00000AD4:             ; 
+00000AD4:             ;     prog1_loop
+00000AD4: E2811001    ;         ADD R1, R1, #1
+00000AD8: E5001000    ;         STR R1, [R0]
+00000ADC: EAFFFFFC    ;         B prog1_loop
 00000AE0:             ; 
-00000AE0:             ;     prog2_loop
-00000AE0: E2811001    ;         ADD R1, R1, #1
-00000AE4: E5001000    ;         STR R1, [R0]
-00000AE8: EAFFFFFC    ;         B prog2_loop
+00000AE0:             ; INCLUDE program2.s
+00000AE0: 00000000    ; thing2 DEFW 0
+00000AE4:             ; prog2
+00000AE4: E28FDE12    ;     ADRL SP, prog2_stack
+00000AE8: E24F0010    ;     ADR R0, thing2
 00000AEC:             ; 
-00000AEC:             ; DEFS 256
-00000BEC:             ; prog2_stack
-00000BEC:             ; INCLUDE program3.s
-00000BEC:             ; CSWITCH_DELAY EQU 10
-00000BEC:             ; 
-00000BEC: 54 68 72 65 ; thread1_message DEFB "Thread1:\0"
-00000BF0: 61 64 31 3A ; 
-00000BF4: 00          ; 
-00000BF5: 0A 54 68 72 ; thread2_message DEFB "\nThread2:\0"
-00000BF9: 65 61 64 32 ; 
-00000BFD: 3A 00       ; 
-00000C00:             ; ALIGN
-00000C00:             ; 
-00000C00:             ; prog3
-00000C00: E28FD0FC    ;     ADRL SP, prog3_stack
-00000C04: E24F7F9D    ;     ADR R7, thing1
-00000C08: E24F8E15    ;     ADR R8, thing2
-00000C0C:             ; 
-00000C0C:             ; 
-00000C0C:             ; 
-00000C0C:             ;     prog3_loop
-00000C0C: E3A0300A    ;         MOV R3, #CSWITCH_DELAY ; output every 10 times we are context switched to
-00000C10: E2533001    ;         prog3_wait SUBS R3, R3, #1
-00000C14: 1F00000A    ;             SVCNE call_yield ; yield to other threads if we don't want to output yet
-00000C18: 1AFFFFFC    ;             BNE prog3_wait
-00000C1C:             ; 
-00000C1C:             ;         ; interrupts disabled, cannot be context-switched here
-00000C1C: EF000002    ;         SVC call_clear_display
-00000C20:             ; 
-00000C20: E24F003C    ;         ADR R0, thread1_message
-00000C24: EF000000    ;         SVC call_write_string
+00000AEC:             ;     ; some magic numbers to illustrate register state preservation
+00000AEC: E3A0200A    ;     MOV R2, #10
+00000AF0: E3A0300B    ;     MOV R3, #11
+00000AF4: E3A0400C    ;     MOV R4, #12
+00000AF8: E3A0500D    ;     MOV R5, #13
+00000AFC:             ; 
+00000AFC: E3A0800F    ;     MOV R8, #15 
+00000B00:             ; 
+00000B00:             ;     prog2_loop
+00000B00: E2811001    ;         ADD R1, R1, #1
+00000B04: E5001000    ;         STR R1, [R0]
+00000B08: EAFFFFFC    ;         B prog2_loop
+00000B0C:             ; 
+00000B0C:             ; DEFS 256
+00000C0C:             ; prog2_stack
+00000C0C:             ; INCLUDE program3.s
+00000C0C: 00000000    ; thing3 DEFW 0
+00000C10:             ; prog3
+00000C10: E28FDE12    ;     ADRL SP, prog3_stack
+00000C14: E24F0010    ;     ADR R0, thing3
+00000C18:             ; 
+00000C18:             ;     ; some magic numbers to illustrate register state preservation
+00000C18: E3A0200A    ;     MOV R2, #10
+00000C1C: E3A0300E    ;     MOV R3, #14
+00000C20: E3A0400B    ;     MOV R4, #11
+00000C24: E3A0500C    ;     MOV R5, #12
 00000C28:             ; 
-00000C28:             ;         ; dirty binary to ASCII hex code from internet: 
-00000C28:             ;         ; https://stackoverflow.com/questions/53400875/converting-integer-to-hex-string-in-arm-
-                      ; assembly
-00000C28: E5174000    ;         LDR R4, [R7]
-00000C2C: E3A06008    ;         MOV   r6, #8
-00000C30:             ;         output_thing1
-00000C30: E1A00E24    ;             MOV   r0, r4, LSR #28
-00000C34:             ; 
-00000C34: E1A04204    ;             MOV   r4, r4, LSL #4
+00000C28: E3A08004    ;     MOV R8, #4
+00000C2C:             ; 
+00000C2C:             ;     prog3_loop
+00000C2C: E2811001    ;         ADD R1, R1, #1
+00000C30: E5001000    ;         STR R1, [R0]
+00000C34: EAFFFFFC    ;         B prog3_loop
 00000C38:             ; 
-00000C38: E2800030    ;             ADD   r0, r0, #48
-00000C3C: E350003A    ;             CMP   r0, #58              
-00000C40: 22800007    ;             ADDHS r0, r0, #7           
-00000C44: EF000001    ;             SVC call_write_char
-00000C48:             ;             
-00000C48: E2566001    ;             SUBS  r6, r6, #1
-00000C4C: 1AFFFFF7    ;             BNZ   output_thing1
-00000C50:             ; 
-00000C50:             ;             ; output next thread's counter
-00000C50:             ; 
-00000C50: E24F0063    ;             ADR R0, thread2_message
-00000C54: EF000000    ;             SVC call_write_string
-00000C58:             ; 
-00000C58: E5184000    ;             LDR R4, [R8]
-00000C5C: E3A06008    ;             MOV   r6, #8
-00000C60:             ;         output_thing2
-00000C60: E1A00E24    ;             MOV   r0, r4, LSR #28
-00000C64:             ; 
-00000C64: E1A04204    ;             MOV   r4, r4, LSL #4
-00000C68:             ; 
-00000C68: E2800030    ;             ADD   r0, r0, #48
-00000C6C: E350003A    ;             CMP   r0, #58              
-00000C70: 22800007    ;             ADDHS r0, r0, #7           
-00000C74: EF000001    ;             SVC call_write_char
-00000C78:             ;             
-00000C78: E2566001    ;             SUBS  r6, r6, #1
-00000C7C: 1AFFFFF7    ;             BNZ   output_thing2
-00000C80:             ; 
-00000C80: EAFFFFE1    ;         B prog3_loop
-00000C84:             ; 
-00000C84:             ; DEFS 128
-00000D04:             ; prog3_stack
+00000C38:             ; DEFS 256
+00000D38:             ; prog3_stack
+00000D38:             ; INCLUDE program4.s
+00000D38: 00000000    ; thing4 DEFW 0
+00000D3C:             ; prog4
+00000D3C: E28FDE12    ;     ADRL SP, prog4_stack
+00000D40: E24F0010    ;     ADR R0, thing4
+00000D44:             ; 
+00000D44:             ;     ; some magic numbers to illustrate register state preservation
+00000D44: E3A0200A    ;     MOV R2, #10
+00000D48: E3A03001    ;     MOV R3, #1
+00000D4C: E3A04002    ;     MOV R4, #2
+00000D50: E3A05003    ;     MOV R5, #3
+00000D54:             ; 
+00000D54: E3A08005    ;     MOV R8, #5 
+00000D58:             ; 
+00000D58:             ;     prog4_loop
+00000D58: E2811001    ;         ADD R1, R1, #1
+00000D5C: E5001000    ;         STR R1, [R0]
+00000D60: EAFFFFFC    ;         B prog4_loop
+00000D64:             ; 
+00000D64:             ; DEFS 256
+00000E64:             ; prog4_stack
+00000E64:             ; INCLUDE program5.s
+00000E64:             ; CSWITCH_DELAY EQU 20
+00000E64:             ; 
+00000E64: 20 00       ; txtspace_msg DEFB " \0"
+00000E66: 0A 00       ; newline_msg DEFB "\n\0"
+00000E68:             ; ALIGN
+00000E68:             ; 
+00000E68:             ; prog5
+00000E68: E28FDE1F    ;     ADRL SP, prog5_stack
+00000E6C: E24F70BC    ;     ADRL R7, thing1
+00000E70: E2477B01    ; 
+00000E74: E24F8FE7    ;     ADRL R8, thing2
+00000E78: E24F9F9D    ;     ADRL R9, thing3
+00000E7C: E24FAF53    ;     ADRL R10, thing4
+00000E80:             ; 
+00000E80:             ; 
+00000E80:             ;     prog5_loop
+00000E80: E3A03014    ;         MOV R3, #CSWITCH_DELAY ; output every 10 times we are context switched to
+00000E84: E2533001    ;         prog5_wait SUBS R3, R3, #1
+00000E88: 1F00000A    ;             SVCNE call_yield ; yield to other threads if we don't want to output yet
+00000E8C: 1AFFFFFC    ;             BNE prog5_wait
+00000E90:             ; 
+00000E90:             ;         ; interrupts disabled, cannot be context-switched here
+00000E90: EF000002    ;         SVC call_clear_display
+00000E94:             ; 
+00000E94:             ; 
+00000E94:             ;         ; dirty binary to ASCII hex code from internet: 
+00000E94:             ;         ; https://stackoverflow.com/questions/53400875/converting-integer-to-hex-string-in-arm-
+                      ; assembly
+00000E94: E5174000    ;         LDR R4, [R7]
+00000E98: E1A04204    ;         LSL R4, R4, #4 ; Shift so shorter to display on screen
+00000E9C: E3A06007    ;         MOV   r6, #7
+00000EA0:             ;         output_thing1
+00000EA0: E1A00E24    ;             MOV   r0, r4, LSR #28
+00000EA4:             ; 
+00000EA4: E1A04204    ;             MOV   r4, r4, LSL #4
+00000EA8:             ; 
+00000EA8: E2800030    ;             ADD   r0, r0, #48
+00000EAC: E350003A    ;             CMP   r0, #58              
+00000EB0: 22800007    ;             ADDHS r0, r0, #7           
+00000EB4: EF000001    ;             SVC call_write_char
+00000EB8:             ;             
+00000EB8: E2566001    ;             SUBS  r6, r6, #1
+00000EBC: 1AFFFFF7    ;             BNZ   output_thing1
+00000EC0: E5184000    ;         LDR R4, [R8]
+00000EC4: E1A04204    ;         LSL R4, R4, #4 ; Shift so shorter to display on screen
+00000EC8: E3A06007    ;         MOV   r6, #7
+00000ECC:             ; 
+00000ECC:             ; 
+00000ECC: E24F0070    ;         ADR R0, txtspace_msg
+00000ED0: EF000000    ;         SVC call_write_string
+00000ED4:             ; 
+00000ED4:             ;         output_thing2
+00000ED4: E1A00E24    ;             MOV   r0, r4, LSR #28
+00000ED8:             ; 
+00000ED8: E1A04204    ;             MOV   r4, r4, LSL #4
+00000EDC:             ; 
+00000EDC: E2800030    ;             ADD   r0, r0, #48
+00000EE0: E350003A    ;             CMP   r0, #58              
+00000EE4: 22800007    ;             ADDHS r0, r0, #7           
+00000EE8: EF000001    ;             SVC call_write_char
+00000EEC:             ;             
+00000EEC: E2566001    ;             SUBS  r6, r6, #1
+00000EF0: 1AFFFFF7    ;             BNZ   output_thing2
+00000EF4:             ; 
+00000EF4:             ;         ; output next line's counters
+00000EF4:             ; 
+00000EF4: E24F0096    ;         ADR R0, newline_msg
+00000EF8: EF000000    ;         SVC call_write_string
+00000EFC:             ; 
+00000EFC: E5194000    ;         LDR R4, [R9]
+00000F00: E1A04204    ;         LSL R4, R4, #4 ; Shift so shorter to display on screen
+00000F04: E3A06007    ;         MOV   r6, #7
+00000F08:             ;         output_thing3
+00000F08: E1A00E24    ;             MOV   r0, r4, LSR #28
+00000F0C:             ; 
+00000F0C: E1A04204    ;             MOV   r4, r4, LSL #4
+00000F10:             ; 
+00000F10: E2800030    ;             ADD   r0, r0, #48
+00000F14: E350003A    ;             CMP   r0, #58              
+00000F18: 22800007    ;             ADDHS r0, r0, #7           
+00000F1C: EF000001    ;             SVC call_write_char
+00000F20:             ;             
+00000F20: E2566001    ;             SUBS  r6, r6, #1
+00000F24: 1AFFFFF7    ;             BNZ   output_thing3
+00000F28: E51A4000    ;         LDR R4, [R10]
+00000F2C: E1A04204    ;         LSL R4, R4, #4 ; Shift so shorter to display on screen
+00000F30: E3A06007    ;         MOV   r6, #7
+00000F34:             ; 
+00000F34: E24F00D8    ;         ADR R0, txtspace_msg
+00000F38: EF000000    ;         SVC call_write_string
+00000F3C:             ; 
+00000F3C:             ;         output_thing4
+00000F3C: E1A00E24    ;             MOV   r0, r4, LSR #28
+00000F40:             ; 
+00000F40: E1A04204    ;             MOV   r4, r4, LSL #4
+00000F44:             ; 
+00000F44: E2800030    ;             ADD   r0, r0, #48
+00000F48: E350003A    ;             CMP   r0, #58              
+00000F4C: 22800007    ;             ADDHS r0, r0, #7           
+00000F50: EF000001    ;             SVC call_write_char
+00000F54:             ;             
+00000F54: E2566001    ;             SUBS  r6, r6, #1
+00000F58: 1AFFFFF7    ;             BNZ   output_thing4
+00000F5C:             ; 
+00000F5C: EAFFFFC7    ;         B prog5_loop
+00000F60:             ; 
+00000F60:             ; DEFS 256
+00001060:             ; prog5_stack
 
 Symbol Table: Labels
 : Max_SVC                           0000000F  Value
@@ -997,20 +1086,30 @@ Symbol Table: Labels
 : poll_timer                        00000938  Local -- ARM
 : skip_wrap_case                    00000954  Local -- ARM
 : init                              00000968  Local -- ARM
-: thing1                            00000998  Local -- ARM
-: prog1_stack                       00000A9C  Local -- ARM
-: prog1                             00000A9C  Local -- ARM
-: prog1_loop                        00000AB4  Local -- ARM
-: thing2                            00000AC0  Local -- ARM
-: prog2                             00000AC4  Local -- ARM
-: prog2_loop                        00000AE0  Local -- ARM
-: prog2_stack                       00000BEC  Local -- ARM
-: CSWITCH_DELAY                     0000000A  Value
-: thread1_message                   00000BEC  Local -- ARM
-: thread2_message                   00000BF5  Local -- ARM
-: prog3                             00000C00  Local -- ARM
-: prog3_loop                        00000C0C  Local -- ARM
-: prog3_wait                        00000C10  Local -- ARM
-: output_thing1                     00000C30  Local -- ARM
-: output_thing2                     00000C60  Local -- ARM
-: prog3_stack                       00000D04  Local -- ARM
+: thing1                            000009B8  Local -- ARM
+: prog1_stack                       00000ABC  Local -- ARM
+: prog1                             00000ABC  Local -- ARM
+: prog1_loop                        00000AD4  Local -- ARM
+: thing2                            00000AE0  Local -- ARM
+: prog2                             00000AE4  Local -- ARM
+: prog2_loop                        00000B00  Local -- ARM
+: prog2_stack                       00000C0C  Local -- ARM
+: thing3                            00000C0C  Local -- ARM
+: prog3                             00000C10  Local -- ARM
+: prog3_loop                        00000C2C  Local -- ARM
+: prog3_stack                       00000D38  Local -- ARM
+: thing4                            00000D38  Local -- ARM
+: prog4                             00000D3C  Local -- ARM
+: prog4_loop                        00000D58  Local -- ARM
+: prog4_stack                       00000E64  Local -- ARM
+: CSWITCH_DELAY                     00000014  Value
+: txtspace_msg                      00000E64  Local -- ARM
+: newline_msg                       00000E66  Local -- ARM
+: prog5                             00000E68  Local -- ARM
+: prog5_loop                        00000E80  Local -- ARM
+: prog5_wait                        00000E84  Local -- ARM
+: output_thing1                     00000EA0  Local -- ARM
+: output_thing2                     00000ED4  Local -- ARM
+: output_thing3                     00000F08  Local -- ARM
+: output_thing4                     00000F3C  Local -- ARM
+: prog5_stack                       00001060  Local -- ARM
